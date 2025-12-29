@@ -1,0 +1,15 @@
+[Unit]
+Description=Renew SSL certificates weekly for ppeamrisaralda.com.co
+Requires=certbot-weekly.service
+After=network-online.target
+Wants=network-online.target
+
+[Timer]
+OnCalendar=weekly
+OnCalendar=Mon *-*-* 03:00:00
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+

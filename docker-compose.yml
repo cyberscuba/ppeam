@@ -1,0 +1,78 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: ppeam_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - /data/containers/postgres/data:/var/lib/postgresql/data
+    networks:
+      - ppeam_net
+
+  redis:
+    image: redis:7
+    container_name: ppeam_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - /data/containers/redis/data:/data
+    networks:
+      - ppeam_net
+
+  minio:
+    image: minio/minio:latest
+    container_name: ppeam_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - /data/containers/minio/data:/data
+    ports:
+      - "9001:9001"   # consola (opcional, cerrar en prod)
+    networks:
+      - ppeam_net
+
+  backend:
+    container_name: ppeam_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: exhibidores-backend:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    ports:
+      - "8080:8000"   # cerrar cuando haya nginx
+    volumes:
+      - /data/containers/backend/logs:/app/logs
+    networks:
+      - ppeam_net
+
+  frontend:
+    container_name: ppeam_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: exhibidores-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"     # cerrar cuando haya nginx
+    networks:
+      - ppeam_net
+
+networks:
+  ppeam_net:
+    driver: bridge
+

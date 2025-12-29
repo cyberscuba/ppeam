@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: #FCFDFA;
+    --color-text: #0D1214;
+    --color-primary: #21B0E3;
+    --color-secondary: #6B8B4A;
+    --color-neutral: #B4C3AE;
+  }
+
+  * {
+    @apply box-border;
+  }
+  
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    @apply antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Accessibility: Focus visible */
+  *:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  
+  /* Large touch targets for mobile */
+  button, a, input, select, textarea {
+    @apply min-h-[44px];
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-6 py-3 rounded-lg font-medium transition-all duration-200 min-h-[48px] text-base shadow-sm;
+  }
+  
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-bg);
+    @apply hover:opacity-90 active:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    background-color: var(--color-secondary);
+    color: var(--color-bg);
+    @apply hover:opacity-90 active:opacity-80;
+  }
+  
+  .input {
+    background-color: var(--color-bg);
+    border: 2px solid var(--color-neutral);
+    color: var(--color-text);
+    @apply w-full px-4 py-3 rounded-lg text-base;
+  }
+  
+  .input:focus {
+    border-color: var(--color-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(33, 176, 227, 0.1);
+  }
+  
+  .card {
+    background-color: var(--color-neutral);
+    @apply rounded-xl p-6;
+    box-shadow: 0 2px 8px rgba(13, 18, 20, 0.08);
+  }
+  
+  /* Custom scrollbar for schedule lists */
+  .card .overflow-y-auto::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .card .overflow-y-auto::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
+  }
+  
+  .card .overflow-y-auto::-webkit-scrollbar-thumb {
+    background: var(--color-primary);
+    border-radius: 3px;
+  }
+  
+  .card .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background: #1a8db6;
+  }
+
+  /* Custom scrollbar para cards de exhibidor */
+  .exhibitor-card-scroll::-webkit-scrollbar {
+    width: 10px;
+  }
+  
+  .exhibitor-card-scroll::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 5px;
+  }
+  
+  .exhibitor-card-scroll::-webkit-scrollbar-thumb {
+    background: #6b8b4a;
+    border-radius: 5px;
+    border: 2px solid #f3f4f6;
+  }
+  
+  .exhibitor-card-scroll::-webkit-scrollbar-thumb:hover {
+    background: #5a7a3d;
+  }
+
+  /* Scrollbar para Firefox */
+  .exhibitor-card-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #6b8b4a #f3f4f6;
+  }
+  
+  .header-app {
+    background-color: #ffffff;
+    color: #6b7280;
+    @apply py-4 px-4;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@layer utilities {
+  /* Animación de fade-in */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  /* Animación de slide-up */
+  @keyframes slideUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.4s ease-out;
+  }
+}

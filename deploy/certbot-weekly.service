@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew SSL certificates weekly for ppeamrisaralda.com.co
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/certbot-renew-weekly.sh
+
