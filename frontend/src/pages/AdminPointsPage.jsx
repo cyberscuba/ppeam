@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Clock, Edit, Power, ArrowLeft, ToggleLeft, ToggleRight, Plus, Trash } from 'lucide-react'
+import { MapPin, Clock, Edit, Power, ArrowLeft, ToggleLeft, ToggleRight, Plus, Trash, Upload } from 'lucide-react'
 import client from '../api/client'
 import logger from '../utils/logger'
 import ConfirmationModal from '../components/ConfirmationModal'
@@ -1565,20 +1565,64 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
 
                 <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Input de URL */}
+                    {/* Carga de imagen */}
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        URL de la imagen
+                      <label className="block text-sm font-semibold text-gray-700 mb-3">
+                        Cargar imagen
                       </label>
-                      <input
-                        type="url"
-                        value={formData.photo_url}
-                        onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
-                        className="input w-full"
-                        placeholder="https://ejemplo.com/foto.jpg o /uploads/archivo.jpg"
-                      />
-                      <p className="text-xs text-gray-500 mt-2">
-                        Puedes usar URLs completas (https://...) o rutas locales (/uploads/...)
+                      <div className="space-y-3">
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById('photo-upload').click()}
+                          className="w-full btn btn-primary py-2.5 flex items-center justify-center gap-2"
+                        >
+                          <Upload size={18} />
+                          Cargar imagen
+                        </button>
+                        <input
+                          id="photo-upload"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              const formDataUpload = new FormData()
+                              formDataUpload.append('file', file)
+
+                              const uploadBtn = e.target.previousElementSibling
+                              uploadBtn.disabled = true
+                              uploadBtn.textContent = 'Subiendo...'
+
+                              client.post('/api/upload/photo', formDataUpload)
+                                .then(response => {
+                                  setFormData({ ...formData, photo_url: response.data.url })
+                                  setNotification({
+                                    type: 'success',
+                                    title: 'Imagen cargada',
+                                    message: 'La imagen se cargó correctamente.',
+                                    details: []
+                                  })
+                                  e.target.value = ''
+                                })
+                                .catch(error => {
+                                  setNotification({
+                                    type: 'error',
+                                    title: 'Error al cargar',
+                                    message: 'No se pudo cargar la imagen.',
+                                    details: [error.response?.data?.detail || error.message]
+                                  })
+                                })
+                                .finally(() => {
+                                  uploadBtn.disabled = false
+                                  uploadBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> Cargar imagen'
+                                })
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-3">
+                        Formatos: JPG, PNG, WebP, GIF (máx. 5MB)
                       </p>
                     </div>
 
