@@ -1417,6 +1417,7 @@ async def get_available_hermanos(
                 "is_assigned_here": False
             })
 
+        import sys
         print(f"✅ get_available_hermanos: exhibitor_id={exhibitor_id}, gender={gender}, found {len(available)} hermanos", file=sys.stderr)
         return available
     except Exception as e:
@@ -1860,7 +1861,7 @@ async def get_exhibitor_leaders(
                 "exhibitor_id": str(exhibitor_id_val),
                 "exhibitor_name": exhibitor_name,
                 "position": position,
-                "created_at": created_at.isoformat() if created_at else None
+                "created_at": str(created_at) if created_at else None
             })
 
         return response
