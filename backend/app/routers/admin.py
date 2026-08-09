@@ -2114,9 +2114,10 @@ async def assign_hermano_as_leader(
                 raise HTTPException(status_code=400, detail=f"Ya existe un líder con posición {position} en este exhibidor")
 
         # Check if hermano already has this position in this exhibitor - use raw SQL
+        # Convert UUID to string for SQLite compatibility
         existing_check = await db.execute(
             sql_text("SELECT id FROM exhibitor_leaders WHERE admin_id = :admin_id AND exhibitor_id = :exhibitor_id AND position = :position"),
-            {"admin_id": admin_obj.id, "exhibitor_id": exhibitor_id, "position": position}
+            {"admin_id": str(admin_obj.id), "exhibitor_id": exhibitor_id, "position": position}
         )
         if existing_check.fetchone():
             raise HTTPException(status_code=400, detail="Este hermano ya tiene esta posición en este exhibidor")
