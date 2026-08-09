@@ -77,7 +77,20 @@ async def create_request(
             if not slot:
                 conflicts.append({"slot_id": item_data.slot_id, "reason": "Slot not found"})
                 continue
-            
+
+            # Verify schedule is active
+            schedule_result = await db.execute(
+                select(Schedule).where(Schedule.id == slot.schedule_id)
+            )
+            schedule = schedule_result.scalar_one_or_none()
+            if not schedule:
+                conflicts.append({"slot_id": item_data.slot_id, "reason": "Schedule not found"})
+                continue
+
+            if not schedule.is_active:
+                conflicts.append({"slot_id": item_data.slot_id, "reason": "Schedule is inactive - no new bookings allowed"})
+                continue
+
             # Create request item (unique constraint on slot_id handles concurrency)
             request_item = RequestItem(
                 request_id=request.id,
@@ -264,7 +277,17 @@ async def create_request_public(
             if not schedule:
                 conflicts.append({"point_id": item_data.point_id, "schedule_id": item_data.schedule_id, "date": item_data.slot_date, "reason": "Horario no encontrado"})
                 continue
-            
+
+            # Verify schedule is active - block new bookings if inactive
+            if not schedule.is_active:
+                conflicts.append({
+                    "point_id": item_data.point_id,
+                    "schedule_id": item_data.schedule_id,
+                    "date": item_data.slot_date,
+                    "reason": "El horario está desactivado y no permite nuevas solicitudes"
+                })
+                continue
+
             # Get exhibitor from schedule
             exhibitor_result = await db.execute(
                 select(Exhibitor).where(Exhibitor.id == schedule.exhibitor_id)
