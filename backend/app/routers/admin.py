@@ -1359,72 +1359,50 @@ async def get_available_hermanos(
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get hermanos available for assignment to an exhibitor (varones only, not yet assigned to other exhibitors)"""
-    # Get all male hermanos
+    """Get all active male hermanos available for assignment"""
+    from sqlalchemy import text
+
+    # Get all active hermanos ordered by name
     result = await db.execute(
-        select(Hermano)
-        .where(Hermano.is_active == True)
-        .order_by(Hermano.nombre)
+        text("SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = 1 ORDER BY nombre")
     )
-    all_hermanos = result.scalars().all()
+    all_hermanos_rows = result.fetchall()
 
-    # Get existing leader admin_ids for this exhibitor (to find their hermano_ids)
-    leaders_result = await db.execute(
-        select(ExhibitorLeader.admin_id)
-        .where(ExhibitorLeader.exhibitor_id == exhibitor_id) if exhibitor_id else select(ExhibitorLeader.admin_id).where(False)
-    )
-    existing_leader_admin_ids = {str(lid) for lid, in leaders_result.all()}
-
-    # Get hermano_ids for existing leaders in this exhibitor
+    # Get existing hermano_ids already assigned to THIS exhibitor
     existing_hermano_ids = set()
-    if existing_leader_admin_ids:
-        hermano_result = await db.execute(
-            select(Admin.hermano_id)
-            .where(Admin.id.in_(list(existing_leader_admin_ids)))
-            .where(Admin.hermano_id.isnot(None))
-        )
-        existing_hermano_ids = {str(hid) for hid, in hermano_result.all()}
-
-    # Get hermanos with leadership in OTHER exhibitors (through Admin)
     if exhibitor_id:
-        other_leaders_result = await db.execute(
-            select(ExhibitorLeader.admin_id)
-            .where(ExhibitorLeader.exhibitor_id != exhibitor_id)
+        existing_result = await db.execute(
+            text("""
+                SELECT DISTINCT a.hermano_id
+                FROM admins a
+                JOIN exhibitor_leaders el ON a.id = el.admin_id
+                WHERE el.exhibitor_id = :exhibitor_id AND a.hermano_id IS NOT NULL
+            """),
+            {"exhibitor_id": str(exhibitor_id)}
         )
-    else:
-        other_leaders_result = await db.execute(
-            select(ExhibitorLeader.admin_id)
-        )
-    other_leader_admin_ids = {str(lid) for lid, in other_leaders_result.all()}
+        existing_hermano_ids = {str(hid[0]) for hid in existing_result.fetchall()}
 
-    # Get hermano_ids for leaders in other exhibitors
-    other_leader_hermano_ids = set()
-    if other_leader_admin_ids:
-        other_hermano_result = await db.execute(
-            select(Admin.hermano_id)
-            .where(Admin.id.in_(list(other_leader_admin_ids)))
-            .where(Admin.hermano_id.isnot(None))
-        )
-        other_leader_hermano_ids = {str(hid) for hid, in other_hermano_result.all()}
-
-    # Filter: only varones (detect gender), not already leading other exhibitors
+    # Filter: only varones (male hermanos), showing all regardless of other exhibitor assignments
     available = []
-    for h in all_hermanos:
-        gender = h.genero or detect_gender_from_name(h.nombre)
+    for row in all_hermanos_rows:
+        hermano_id, nombre, congregacion, telefono, genero = row
+
+        # Detect gender if not stored
+        actual_gender = genero or detect_gender_from_name(nombre)
 
         # Only include varones (not hermanas)
-        if gender != "hermana":
-            # Check if already leading another exhibitor
-            if str(h.id) not in other_leader_hermano_ids:
-                available.append({
-                    "id": str(h.id),
-                    "nombre": h.nombre,
-                    "congregacion": h.congregacion,
-                    "telefono": h.telefono,
-                    "genero": gender,
-                    "gender_label": get_gender_label(h.nombre) if not h.genero else ("Hermana" if h.genero == "hermana" else "Hermano"),
-                    "is_assigned_here": str(h.id) in existing_hermano_ids
-                })
+        if actual_gender != "hermana":
+            is_assigned_here = str(hermano_id) in existing_hermano_ids
+
+            available.append({
+                "id": str(hermano_id),
+                "nombre": nombre,
+                "congregacion": congregacion,
+                "telefono": telefono,
+                "genero": actual_gender,
+                "gender_label": get_gender_label(nombre) if not genero else ("Hermana" if genero == "hermana" else "Hermano"),
+                "is_assigned_here": is_assigned_here
+            })
 
     return available
 
