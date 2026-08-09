@@ -546,6 +546,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
   const [schedules, setSchedules] = useState([])
   const [leaders, setLeaders] = useState([])
   const [admins, setAdmins] = useState([])
+  const [hermanos, setHermanos] = useState([])
   const [loading, setLoading] = useState(false)
   const [loadingSchedules, setLoadingSchedules] = useState(false)
   const [confirmationModal, setConfirmationModal] = useState(null)
@@ -557,9 +558,9 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     end_time: '',
     is_active: true
   })
-  
+
   const [newLeader, setNewLeader] = useState({
-    admin_id: '',
+    hermano_id: '',
     position: 'encargado_turnos_principal'
   })
   
@@ -651,18 +652,19 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     if (!currentPoint || !currentPoint.id) return
     setLoadingSchedules(true)
     try {
-      const [pointData, leadersData, adminsData] = await Promise.all([
+      const [pointData, leadersData, hermanosData] = await Promise.all([
         client.get(`/api/admin/points/${currentPoint.id}`),
         client.get(`/api/admin/exhibitor-leaders?exhibitor_id=${currentPoint.id}`),
-        client.get('/api/admin/admins')
+        client.get(`/api/admin/hermanos/available?exhibitor_id=${currentPoint.id}`)
       ])
       const scheds = pointData.data.schedules || []
       console.log('📅 Franjas cargadas:', scheds.length, scheds)
       setSchedules(scheds)
       setLeaders(Array.isArray(leadersData.data) ? leadersData.data : [])
-      // Filtrar solo admins con rol lider_exhibidor
-      const admins = Array.isArray(adminsData.data) ? adminsData.data : []
-      setAdmins(admins.filter(a => a.role === 'lider_exhibidor') || [])
+      // Cargar todos los hermanos disponibles
+      const hermanosList = Array.isArray(hermanosData.data) ? hermanosData.data : []
+      console.log('👥 Hermanos disponibles:', hermanosList.length)
+      setHermanos(hermanosList)
     } catch (error) {
       console.error('Error loading point details:', error)
       setSchedules([])
@@ -673,13 +675,13 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     }
   }
   
-  const handleAddLeader = async (adminId, position) => {
+  const handleAddLeader = async (hermanoId, position) => {
     const currentPoint = initialPoint || editingPoint
     if (!currentPoint || !currentPoint.id) return
-    
+
     try {
-      const { data } = await client.post('/api/admin/exhibitor-leaders', {
-        admin_id: adminId,
+      const { data } = await client.post('/api/admin/exhibitor-leaders/from-hermano', {
+        hermano_id: hermanoId,
         exhibitor_id: currentPoint.id,
         position: position
       })
@@ -687,36 +689,36 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       loadPointDetails() // Recargar para obtener nombres
       setNotification({
         type: 'success',
-        title: 'Encargado Agregado',
-        message: 'El encargado ha sido agregado correctamente.',
+        title: 'Hermano Asignado',
+        message: 'El hermano ha sido asignado correctamente como encargado.',
         details: []
       })
     } catch (error) {
       setNotification({
         type: 'error',
-        title: 'Error al Agregar Encargado',
-        message: 'No se pudo agregar el encargado.',
+        title: 'Error al Asignar Hermano',
+        message: 'No se pudo asignar al hermano como encargado.',
         details: [error.response?.data?.detail || error.message]
       })
     }
   }
   
   const handleAddLeaderWithPosition = async () => {
-    if (!newLeader.admin_id) {
+    if (!newLeader.hermano_id) {
       setNotification({
         type: 'warning',
-        title: 'Seleccionar Administrador',
-        message: 'Por favor seleccione un administrador.',
+        title: 'Seleccionar Hermano',
+        message: 'Por favor seleccione un hermano para asignar.',
         details: []
       })
       return
     }
-    
-    await handleAddLeader(newLeader.admin_id, newLeader.position)
-    
+
+    await handleAddLeader(newLeader.hermano_id, newLeader.position)
+
     // Limpiar el formulario
     setNewLeader({
-      admin_id: '',
+      hermano_id: '',
       position: 'encargado_turnos_principal'
     })
   }
@@ -1953,14 +1955,14 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                   <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row gap-2">
                       <select
-                        value={newLeader.admin_id}
-                        onChange={(e) => setNewLeader({ ...newLeader, admin_id: e.target.value })}
+                        value={newLeader.hermano_id}
+                        onChange={(e) => setNewLeader({ ...newLeader, hermano_id: e.target.value })}
                         className="input flex-1 py-3 text-base font-medium"
                       >
                         <option value="">Seleccionar hermano...</option>
-                        {admins && Array.isArray(admins) && admins.filter(admin => !leaders || !Array.isArray(leaders) || !leaders.some(l => l.admin_id === admin.id)).map(admin => (
-                          <option key={admin.id} value={admin.id}>
-                            {admin.hermano ? admin.hermano.nombre : admin.user?.full_name}
+                        {hermanos && Array.isArray(hermanos) && hermanos.filter(hermano => !hermano.is_assigned_here).map(hermano => (
+                          <option key={hermano.id} value={hermano.id}>
+                            {hermano.nombre}
                           </option>
                         ))}
                       </select>
@@ -1976,7 +1978,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                       <button
                         type="button"
                         onClick={handleAddLeaderWithPosition}
-                        disabled={!newLeader.admin_id}
+                        disabled={!newLeader.hermano_id}
                         className="btn btn-primary flex items-center justify-center gap-2 py-3 px-6 font-bold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                       >
                         <Plus size={20} />
