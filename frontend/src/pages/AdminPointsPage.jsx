@@ -303,10 +303,12 @@ export default function AdminPointsPage() {
                           const positionLabels = {
                             'encargado_turnos_principal': 'Encargado Turnos Principal',
                             'encargado_turnos_remplazo': 'Encargado Turnos Remplazo',
-                            'publicaciones_mantenimiento': 'Publicaciones y Mantenimiento'
+                            'publicaciones_mantenimiento': 'Publicaciones y Mantenimiento',
+                            'principal': 'Responsable Principal',
+                            'suplente': 'Responsable Suplente'
                           }
-                          
-                          const positions = ['encargado_turnos_principal', 'encargado_turnos_remplazo', 'publicaciones_mantenimiento']
+
+                          const positions = ['encargado_turnos_principal', 'encargado_turnos_remplazo', 'publicaciones_mantenimiento', 'principal', 'suplente']
                           
                           return positions.map((positionKey) => {
                             const leader = point.leaders.find(l => l.position === positionKey)
@@ -533,7 +535,9 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
   const positionOptions = [
     { value: 'encargado_turnos_principal', label: 'Encargado Turnos Principal' },
     { value: 'encargado_turnos_remplazo', label: 'Encargado Turnos Remplazo' },
-    { value: 'publicaciones_mantenimiento', label: 'Publicaciones y Mantenimiento' }
+    { value: 'publicaciones_mantenimiento', label: 'Publicaciones y Mantenimiento' },
+    { value: 'principal', label: 'Responsable Principal' },
+    { value: 'suplente', label: 'Responsable Suplente' }
   ]
 
   const getWeekdayLabel = (weekday) => {
@@ -1136,23 +1140,24 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                   className="input w-full"
                   placeholder="https://ejemplo.com/foto.jpg"
                 />
-                <p className="text-xs text-gray-600 mt-2">Ingrese la URL completa de la foto (comienza con https://)</p>
+                <p className="text-xs text-gray-600 mt-2">Ej: /uploads/archivo.jpg o https://ejemplo.com/foto.jpg</p>
               </div>
               {formData.photo_url && (
-                <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white flex items-center justify-center p-2">
+                <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white flex flex-col items-center justify-center p-3 min-h-40">
                   <img
                     src={formData.photo_url}
                     alt="Preview"
-                    className="max-h-32 object-cover rounded"
+                    className="max-h-36 max-w-full object-contain rounded"
                     onError={(e) => {
                       e.target.style.display = 'none'
-                      e.target.nextSibling.style.display = 'flex'
+                      if (e.target.parentElement) {
+                        const errorDiv = document.createElement('div')
+                        errorDiv.className = 'text-center text-gray-500 text-sm flex flex-col items-center gap-2'
+                        errorDiv.innerHTML = '<p className="text-lg">❌</p><p>No se pudo cargar</p><p className="text-xs">Verifica la URL</p>'
+                        e.target.parentElement.appendChild(errorDiv)
+                      }
                     }}
                   />
-                  <div style={{display: 'none'}} className="text-center text-gray-500 text-sm w-full">
-                    <p>❌ No se pudo cargar la imagen</p>
-                    <p className="text-xs">Verifica que la URL sea correcta</p>
-                  </div>
                 </div>
               )}
             </div>
@@ -1613,12 +1618,14 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                   <div className="mb-5 p-4 bg-white rounded-lg border border-purple-200">
                     <p className="text-sm font-semibold text-gray-800 mb-3">📋 Estado actual de responsabilidades:</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {['encargado_turnos_principal', 'encargado_turnos_remplazo', 'publicaciones_mantenimiento'].map(pos => {
+                      {['encargado_turnos_principal', 'encargado_turnos_remplazo', 'publicaciones_mantenimiento', 'principal', 'suplente'].map(pos => {
                         const hasLeader = leaders.some(l => l.position === pos)
                         const label = {
                           'encargado_turnos_principal': 'Encargado Principal',
                           'encargado_turnos_remplazo': 'Encargado Remplazo',
-                          'publicaciones_mantenimiento': 'Publicaciones'
+                          'publicaciones_mantenimiento': 'Publicaciones',
+                          'principal': 'Responsable Principal',
+                          'suplente': 'Responsable Suplente'
                         }[pos]
                         const leader = leaders.find(l => l.position === pos)
                         return (
