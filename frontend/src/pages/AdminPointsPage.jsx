@@ -35,6 +35,13 @@ export default function AdminPointsPage() {
     try {
       // Incluir todos los schedules incluso si el exhibidor está cerrado (para admin)
       const { data } = await client.get('/points?active_only=false&include_all_schedules=true')
+
+      if (!Array.isArray(data)) {
+        logger.error('Error loading points: Response is not an array', data)
+        setPoints([])
+        return
+      }
+
       logger.log('Points loaded:', data.length, 'points')
       data.forEach(p => {
         logger.log(`Point ${p.name}:`, {
@@ -48,6 +55,7 @@ export default function AdminPointsPage() {
       setPoints(data)
     } catch (error) {
       logger.error('Error loading points:', error)
+      setPoints([])
     } finally {
       setLoading(false)
     }
