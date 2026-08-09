@@ -1347,6 +1347,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                                             className="bg-transparent border-0 text-sm font-bold text-gray-900 focus:ring-0 p-0 w-10"
                                           >
                                             <option value="00">00</option>
+                                            <option value="30">30</option>
                                           </select>
                                         </div>
 
@@ -1566,7 +1567,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
 
                       {/* Nota de validación */}
                       <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        Solo horas en punto (:00) • Duración entre 1 y 10 horas
+                        Intervalos de 30 minutos • Duración entre 1 y 10 horas
                       </p>
 
                       {/* Botones de acción */}
