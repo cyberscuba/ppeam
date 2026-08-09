@@ -539,3 +539,10 @@ async def create_request_public(
         "items": response_items,
         "conflicts": conflicts if conflicts else None
     }
+
+
+async def check_time_conflict(db: AsyncSession, user_id: str, slot_date: date, start_time: str, end_time: str) -> bool:
+    """Check if there's a time conflict for a user on a specific date"""
+    # TODO: Implement time conflict checking logic
+    # For now, return False (no conflict)
+    return False

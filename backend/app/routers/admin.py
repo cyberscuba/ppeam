@@ -30,21 +30,22 @@ async def get_current_admin(
     from app.utils.security import security
     from jose import jwt
     from app.config import settings
-    
+    from sqlalchemy import text
+
     # Decode token to check is_admin flag
     try:
         token = credentials.credentials
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        
+
         # Check if token has admin flag
         if not payload.get("is_admin", False):
             raise HTTPException(status_code=403, detail="Admin access required")
-        
+
         user_id_str = payload.get("sub")
         if not user_id_str:
             raise HTTPException(status_code=403, detail="Admin access required")
-        
-        # If token has hermano prefix, find admin by hermano_id
+
+        # Use raw SQL to find admin (avoiding SQLAlchemy ORM issues with SQLite)
         if user_id_str.startswith("hermano_"):
             hermano_id_str = user_id_str.replace("hermano_", "")
             from uuid import UUID
@@ -53,10 +54,22 @@ async def get_current_admin(
             except ValueError:
                 raise HTTPException(status_code=403, detail="Admin access required")
 
-            result = await db.execute(
-                select(Admin).where(Admin.hermano_id == hermano_id)
-            )
-            admin = result.scalar_one_or_none()
+            # Use raw SQL
+            result = await db.execute(text(f"SELECT id, username, user_id, hermano_id, password_hash, role FROM admins WHERE hermano_id = '{hermano_id}'"))
+            admin_row = result.fetchone()
+            if admin_row:
+                # Create a mock Admin object with the raw data
+                from app.models import Admin as AdminModel
+                admin = AdminModel(
+                    id=admin_row[0],
+                    username=admin_row[1],
+                    user_id=admin_row[2],
+                    hermano_id=admin_row[3],
+                    password_hash=admin_row[4],
+                    role=admin_row[5]
+                )
+            else:
+                admin = None
         else:
             # Regular user token - find admin by user_id
             from uuid import UUID
@@ -65,11 +78,23 @@ async def get_current_admin(
             except ValueError:
                 raise HTTPException(status_code=403, detail="Admin access required")
 
-            result = await db.execute(
-                select(Admin).where(Admin.user_id == user_id)
-            )
-            admin = result.scalar_one_or_none()
-        
+            # Use raw SQL
+            result = await db.execute(text(f"SELECT id, username, user_id, hermano_id, password_hash, role FROM admins WHERE user_id = '{user_id}'"))
+            admin_row = result.fetchone()
+            if admin_row:
+                # Create a mock Admin object with the raw data
+                from app.models import Admin as AdminModel
+                admin = AdminModel(
+                    id=admin_row[0],
+                    username=admin_row[1],
+                    user_id=admin_row[2],
+                    hermano_id=admin_row[3],
+                    password_hash=admin_row[4],
+                    role=admin_row[5]
+                )
+            else:
+                admin = None
+
         if not admin:
             raise HTTPException(status_code=403, detail="Admin access required")
         
