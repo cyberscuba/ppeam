@@ -25,6 +25,7 @@ export default function AdminPointsPage() {
   const [editingPoint, setEditingPoint] = useState(null)
   const [confirmationModal, setConfirmationModal] = useState(null)
   const [notification, setNotification] = useState(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -1127,33 +1128,6 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
             </p>
           </div>
 
-          <div className="border-2 border-gray-200 rounded-lg p-4 bg-gray-50">
-            <label className="block text-gray-700 font-semibold mb-3">
-              📸 Foto del Exhibidor
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <input
-                  type="url"
-                  value={formData.photo_url}
-                  onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
-                  className="input w-full"
-                  placeholder="/uploads/archivo.jpg"
-                />
-                <p className="text-xs text-gray-600 mt-2">Ej: /uploads/archivo.jpg o https://ejemplo.com/foto.jpg</p>
-              </div>
-              {formData.photo_url && (
-                <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white flex items-center justify-center p-3 min-h-40">
-                  <img
-                    src={formData.photo_url}
-                    alt="Preview"
-                    className="max-h-36 max-w-full object-contain"
-                    onError={() => {}}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* Capacidad de Personas por Turno */}
           <div className="grid grid-cols-2 gap-4">
@@ -1639,10 +1613,20 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                         <button
                           type="button"
                           onClick={() => document.getElementById('photo-upload').click()}
-                          className="w-full btn btn-primary py-2.5 flex items-center justify-center gap-2"
+                          disabled={uploadingPhoto}
+                          className="w-full btn btn-primary py-2.5 flex items-center justify-center gap-2 disabled:opacity-60"
                         >
-                          <Upload size={18} />
-                          Cargar imagen
+                          {uploadingPhoto ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                              Subiendo...
+                            </>
+                          ) : (
+                            <>
+                              <Upload size={18} />
+                              Cargar imagen
+                            </>
+                          )}
                         </button>
                         <input
                           id="photo-upload"
@@ -1654,9 +1638,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                               const formDataUpload = new FormData()
                               formDataUpload.append('file', file)
 
-                              const uploadBtn = e.target.previousElementSibling
-                              uploadBtn.disabled = true
-                              uploadBtn.textContent = 'Subiendo...'
+                              setUploadingPhoto(true)
 
                               client.post('/api/upload/photo', formDataUpload)
                                 .then(response => {
@@ -1678,8 +1660,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                                   })
                                 })
                                 .finally(() => {
-                                  uploadBtn.disabled = false
-                                  uploadBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> Cargar imagen'
+                                  setUploadingPhoto(false)
                                 })
                             }
                           }}
@@ -1713,7 +1694,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                           <div className="flex flex-col items-center justify-center p-6 text-center">
                             <MapPin size={40} className="text-gray-300 mb-2" />
                             <p className="text-gray-500 text-sm font-medium">Sin imagen</p>
-                            <p className="text-gray-400 text-xs">Ingresa una URL para ver la vista previa</p>
+                            <p className="text-gray-400 text-xs">Usa el botón de arriba para cargar una imagen</p>
                           </div>
                         )}
                         {formData.photo_url && (
