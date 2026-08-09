@@ -728,44 +728,85 @@ async def update_exhibitor(
     db: AsyncSession = Depends(get_db)
 ):
     """Update exhibitor (punto de exhibidor)"""
-    result = await db.execute(select(Exhibitor).where(Exhibitor.id == point_id))
-    exhibitor = result.scalar_one_or_none()
-    
-    if not exhibitor:
+    from sqlalchemy import text
+
+    # Use raw SQL to fetch exhibitor (SQLite async issues with ORM)
+    result = await db.execute(text(f"SELECT id, code, name, description, latitude, longitude, photo_url, \"order\", is_active, min_persons_per_slot, max_persons_per_slot, open_date, close_date FROM exhibitors WHERE id = '{point_id}'"))
+    exhibitor_row = result.fetchone()
+
+    if not exhibitor_row:
         raise HTTPException(status_code=404, detail="Exhibitor not found")
-    
+
+    # Create exhibitor object from raw data
+    exhibitor = Exhibitor(
+        id=exhibitor_row[0],
+        code=exhibitor_row[1],
+        name=exhibitor_row[2],
+        description=exhibitor_row[3],
+        latitude=exhibitor_row[4],
+        longitude=exhibitor_row[5],
+        photo_url=exhibitor_row[6],
+        order=exhibitor_row[7],
+        is_active=exhibitor_row[8],
+        min_persons_per_slot=exhibitor_row[9],
+        max_persons_per_slot=exhibitor_row[10],
+        open_date=exhibitor_row[11],
+        close_date=exhibitor_row[12]
+    )
+
     if data.code is not None:
         # Check if code exists for another exhibitor
-        existing = await db.execute(select(Exhibitor).where(Exhibitor.code == data.code, Exhibitor.id != UUID(point_id)))
-        if existing.scalar_one_or_none():
+        check_result = await db.execute(text(f"SELECT id FROM exhibitors WHERE code = '{data.code}' AND id != '{point_id}'"))
+        if check_result.fetchone():
             raise HTTPException(status_code=400, detail="Exhibitor code already exists")
         exhibitor.code = data.code
     
+    # Build UPDATE query with only changed fields
+    updates = {}
     if data.name is not None:
-        exhibitor.name = data.name
+        updates['name'] = data.name
     if data.description is not None:
-        exhibitor.description = data.description
+        updates['description'] = data.description
     if data.latitude is not None:
-        exhibitor.latitude = data.latitude
+        updates['latitude'] = data.latitude
     if data.longitude is not None:
-        exhibitor.longitude = data.longitude
+        updates['longitude'] = data.longitude
     if data.photo_url is not None:
-        exhibitor.photo_url = data.photo_url
+        updates['photo_url'] = data.photo_url
     if data.order is not None:
-        exhibitor.order = data.order
+        updates['order'] = data.order
     if data.is_active is not None:
-        exhibitor.is_active = data.is_active
+        updates['is_active'] = data.is_active
     if data.min_persons_per_slot is not None:
-        exhibitor.min_persons_per_slot = data.min_persons_per_slot
+        updates['min_persons_per_slot'] = data.min_persons_per_slot
     if data.max_persons_per_slot is not None:
-        exhibitor.max_persons_per_slot = data.max_persons_per_slot
+        updates['max_persons_per_slot'] = data.max_persons_per_slot
     if data.open_date is not None:
-        exhibitor.open_date = data.open_date
+        updates['open_date'] = data.open_date
     if data.close_date is not None:
-        exhibitor.close_date = data.close_date
-    
-    await db.commit()
-    await db.refresh(exhibitor)
+        updates['close_date'] = data.close_date
+
+    # Execute UPDATE if there are changes
+    if updates:
+        set_clause = ', '.join([f"{k} = '{v}'" for k, v in updates.items()])
+        update_sql = f"UPDATE exhibitors SET {set_clause} WHERE id = '{point_id}'"
+        await db.execute(text(update_sql))
+        await db.commit()
+
+        # Fetch updated exhibitor
+        result = await db.execute(text(f"SELECT id, code, name, description, latitude, longitude, photo_url, \"order\", is_active, min_persons_per_slot, max_persons_per_slot FROM exhibitors WHERE id = '{point_id}'"))
+        exhibitor_row = result.fetchone()
+        if exhibitor_row:
+            exhibitor.code = exhibitor_row[1]
+            exhibitor.name = exhibitor_row[2]
+            exhibitor.description = exhibitor_row[3]
+            exhibitor.latitude = exhibitor_row[4]
+            exhibitor.longitude = exhibitor_row[5]
+            exhibitor.photo_url = exhibitor_row[6]
+            exhibitor.order = exhibitor_row[7]
+            exhibitor.is_active = exhibitor_row[8]
+            exhibitor.min_persons_per_slot = exhibitor_row[9]
+            exhibitor.max_persons_per_slot = exhibitor_row[10]
     
     # Log audit
     await log_audit(db, admin.user_id or admin.hermano_id, "admin", "exhibitor_updated", {"exhibitor_id": str(exhibitor.id)})
