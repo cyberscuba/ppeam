@@ -362,14 +362,14 @@ export default function AdminPointsPage() {
                     <div className="border border-gray-300 rounded-lg overflow-hidden">
                       {/* Encabezado de tabla */}
                       <div className="grid grid-cols-12 gap-2 bg-gray-100 border-b border-gray-300 px-3 py-2 font-semibold text-xs text-gray-700">
-                        <div className="col-span-4">Día de la Semana</div>
+                        <div className="col-span-4">Tipo / Día</div>
                         <div className="col-span-3 text-center flex items-center justify-center gap-1">
                           <Clock size={14} />
-                          <span>Hora Inicio</span>
+                          <span>Inicio</span>
                         </div>
                         <div className="col-span-3 text-center flex items-center justify-center gap-1">
                           <Clock size={14} />
-                          <span>Hora Final</span>
+                          <span>Final</span>
                         </div>
                         <div className="col-span-2 text-center">Estado</div>
                       </div>
@@ -377,10 +377,18 @@ export default function AdminPointsPage() {
                       {/* Filas de horarios */}
                       <div className="max-h-64 overflow-y-auto">
                         {point.schedules.map((schedule, index) => {
-                          const weekdayLabel = schedule.weekday !== null && schedule.weekday !== undefined 
-                            ? weekdayOptions.find(opt => opt.value === schedule.weekday)?.label || 'Todos los días'
-                            : 'Todos los días'
-                          
+                          const typeLabel = {
+                            'all_days': 'Todos los días',
+                            'weekends': 'Sábados y Domingos',
+                            'specific_day': weekdayOptions.find(opt => opt.value === schedule.weekday)?.label || 'Día específico'
+                          }[schedule.type] || 'Todos los días'
+
+                          const typeEmoji = {
+                            'all_days': '📅',
+                            'weekends': '🎉',
+                            'specific_day': '📆'
+                          }[schedule.type] || '📅'
+
                           // Formatear tiempo correctamente (manejar formato HH:MM:SS o HH:MM)
                           const formatTime = (timeStr) => {
                             if (!timeStr) return ''
@@ -390,27 +398,32 @@ export default function AdminPointsPage() {
                             }
                             return timeStr
                           }
-                          
+
                           const startTime = formatTime(schedule.start_time)
                           const endTime = formatTime(schedule.end_time)
-                          
+
                           return (
-                            <div 
-                              key={schedule.id} 
+                            <div
+                              key={schedule.id}
                               className={`grid grid-cols-12 gap-2 px-3 py-2.5 text-sm items-center ${
                                 index !== point.schedules.length - 1 ? 'border-b border-gray-200' : ''
                               } ${
-                                schedule.is_active 
-                                  ? 'bg-white hover:bg-gray-50' 
+                                schedule.is_active
+                                  ? 'bg-white hover:bg-gray-50'
                                   : 'bg-gray-50 opacity-60'
                               }`}
                             >
-                              {/* Día de la semana */}
+                              {/* Tipo y día */}
                               <div className="col-span-4 flex items-center gap-2">
-                                <span className="text-base">📅</span>
-                                <span className={`font-medium ${schedule.is_active ? 'text-gray-900' : 'text-gray-500'}`}>
-                                  {weekdayLabel}
-                                </span>
+                                <span className="text-base">{typeEmoji}</span>
+                                <div className="flex-1">
+                                  <div className={`font-medium ${schedule.is_active ? 'text-gray-900' : 'text-gray-500'}`}>
+                                    {typeLabel}
+                                  </div>
+                                  {schedule.type === 'weekends' && (
+                                    <div className="text-xs text-gray-500">Sábado y Domingo</div>
+                                  )}
+                                </div>
                               </div>
                               
                               {/* Hora inicio */}
@@ -538,7 +551,8 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
   const [confirmationModal, setConfirmationModal] = useState(null)
   const [notification, setNotification] = useState(null)
   const [newSchedule, setNewSchedule] = useState({
-    weekday: null, // null = todos los días, 0-6 = lunes-domingo
+    type: 'specific_day', // all_days, weekends, specific_day
+    weekday: 0, // 0-6 para specific_day, 5-6 para weekends, null para all_days
     start_time: '',
     end_time: '',
     is_active: true
@@ -834,6 +848,39 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
   }
 
   const handleAddSchedule = async () => {
+    // Validar tipo de franja
+    const validTypes = ['all_days', 'weekends', 'specific_day']
+    if (!newSchedule.type || !validTypes.includes(newSchedule.type)) {
+      setNotification({
+        type: 'error',
+        title: 'Tipo de Franja Inválido',
+        message: 'Seleccione un tipo de franja válido (Todos los días, Sábados y Domingos, o Día específico).',
+        details: []
+      })
+      return
+    }
+
+    // Validar weekday según tipo
+    if (newSchedule.type === 'specific_day' && (newSchedule.weekday === null || newSchedule.weekday === undefined || newSchedule.weekday < 0 || newSchedule.weekday > 6)) {
+      setNotification({
+        type: 'error',
+        title: 'Día Inválido',
+        message: 'Debe seleccionar un día específico (Lunes a Domingo).',
+        details: []
+      })
+      return
+    }
+
+    if (newSchedule.type === 'weekends' && (newSchedule.weekday !== 5 && newSchedule.weekday !== 6)) {
+      setNotification({
+        type: 'error',
+        title: 'Día Inválido',
+        message: 'Para Sábados y Domingos, seleccione Sábado o Domingo.',
+        details: []
+      })
+      return
+    }
+
     if (!newSchedule.start_time || !newSchedule.end_time) {
       setNotification({
         type: 'warning',
@@ -844,7 +891,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       return
     }
 
-    // Validar que las horas estén en punto (minutos = 00)
+    // Validar que las horas estén en punto o media hora (:00 o :30)
     const startValidation = validateHourOnTheHour(newSchedule.start_time)
     if (!startValidation.valid) {
       setNotification({
@@ -893,18 +940,22 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       // Formatear tiempo a HH:MM:SS
       const startTime = newSchedule.start_time.length === 5 ? newSchedule.start_time + ':00' : newSchedule.start_time
       const endTime = newSchedule.end_time.length === 5 ? newSchedule.end_time + ':00' : newSchedule.end_time
-      
-      // Convert weekday: if it's null/undefined, send null; otherwise send the number (including 0 for Monday)
-      const weekdayValue = (newSchedule.weekday === null || newSchedule.weekday === undefined) ? null : newSchedule.weekday
-      
+
+      // Preparar weekday según el tipo
+      let weekdayValue = newSchedule.weekday
+      if (newSchedule.type === 'all_days') {
+        weekdayValue = null
+      }
+
       const { data } = await client.post(`/api/admin/points/${currentPoint.id}/schedules`, {
+        type: newSchedule.type,
         weekday: weekdayValue,
         start_time: startTime,
         end_time: endTime,
         is_active: newSchedule.is_active
       })
       setSchedules([...schedules, data])
-      setNewSchedule({ weekday: null, start_time: '', end_time: '', is_active: true })
+      setNewSchedule({ type: 'specific_day', weekday: 0, start_time: '', end_time: '', is_active: true })
       setNotification({
         type: 'success',
         title: 'Horario Agregado',
@@ -1474,22 +1525,79 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                     <p className="text-sm text-gray-600 mb-5">Selecciona los días y define el horario de disponibilidad.</p>
 
                     <div className="space-y-4">
-                      {/* Selector de días */}
+                      {/* Selector de tipo de franja */}
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Días
+                          Tipo de Franja
                         </label>
-                        <select
-                          value={newSchedule.weekday === null || newSchedule.weekday === undefined ? '' : newSchedule.weekday}
-                          onChange={(e) => setNewSchedule({ ...newSchedule, weekday: e.target.value === '' ? null : parseInt(e.target.value) })}
-                          className="input w-full py-2.5 text-base"
-                        >
-                          {weekdayOptions.map(opt => (
-                            <option key={opt.value === null ? 'null' : opt.value} value={opt.value === null ? '' : opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setNewSchedule({ ...newSchedule, type: 'all_days', weekday: null })}
+                            className={`p-3 rounded-lg border-2 font-medium transition-all ${
+                              newSchedule.type === 'all_days'
+                                ? 'border-blue-600 bg-blue-50 text-blue-900'
+                                : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                            }`}
+                          >
+                            📅 Todos los días
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewSchedule({ ...newSchedule, type: 'weekends', weekday: 5 })}
+                            className={`p-3 rounded-lg border-2 font-medium transition-all ${
+                              newSchedule.type === 'weekends'
+                                ? 'border-blue-600 bg-blue-50 text-blue-900'
+                                : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                            }`}
+                          >
+                            🎉 Sáb & Dom
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewSchedule({ ...newSchedule, type: 'specific_day', weekday: 0 })}
+                            className={`p-3 rounded-lg border-2 font-medium transition-all ${
+                              newSchedule.type === 'specific_day'
+                                ? 'border-blue-600 bg-blue-50 text-blue-900'
+                                : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                            }`}
+                          >
+                            📆 Día Específico
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Selector de días - dinámico según tipo */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          {newSchedule.type === 'all_days' ? 'Se aplica todos los días' : newSchedule.type === 'weekends' ? 'Sábado y Domingo' : 'Selecciona un día'}
+                        </label>
+                        {newSchedule.type !== 'all_days' && (
+                          <select
+                            value={newSchedule.weekday === null || newSchedule.weekday === undefined ? '' : newSchedule.weekday}
+                            onChange={(e) => {
+                              const value = e.target.value === '' ? null : parseInt(e.target.value)
+                              setNewSchedule({ ...newSchedule, weekday: value })
+                            }}
+                            className="input w-full py-2.5 text-base"
+                          >
+                            {newSchedule.type === 'weekends' ? (
+                              <>
+                                <option value="5">Sábado</option>
+                                <option value="6">Domingo</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="">Selecciona un día</option>
+                                {weekdayOptions.slice(1).map(opt => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </>
+                            )}
+                          </select>
+                        )}
                       </div>
 
                       {/* Inputs de hora - Diseño compacto tipo reloj */}
@@ -1527,6 +1635,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                                 className="w-16 bg-transparent border-0 text-lg font-bold text-gray-900 focus:ring-0 p-0"
                               >
                                 <option value="00">00</option>
+                                <option value="30">30</option>
                               </select>
                             </div>
                           </div>
@@ -1560,6 +1669,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                                 className="w-16 bg-transparent border-0 text-lg font-bold text-gray-900 focus:ring-0 p-0"
                               >
                                 <option value="00">00</option>
+                                <option value="30">30</option>
                               </select>
                             </div>
                           </div>
