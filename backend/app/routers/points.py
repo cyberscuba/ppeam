@@ -225,6 +225,7 @@ async def get_exhibitors(
                     current_count = 0
                     available_count = capacity
                     is_confirmed = False
+                    user_has_slot = False  # No slot exists, so user can't have it
                     # Available only if not past, not too soon, and exhibitor is open
                     available = not is_past and not is_too_soon and is_open_for_requests
                 
