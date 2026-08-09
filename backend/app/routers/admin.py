@@ -2048,8 +2048,12 @@ async def assign_hermano_as_leader(
         if not hermano_id or not exhibitor_id:
             raise HTTPException(status_code=400, detail="Debe proporcionar hermano_id y exhibitor_id")
 
-        # Verify hermano exists - use string comparison for SQLite compatibility
         from sqlalchemy import text as sql_text
+        from uuid import uuid4
+        import secrets
+        import string
+
+        # Verify hermano exists
         hermano_result = await db.execute(sql_text("SELECT id, nombre FROM hermanos WHERE id = :id"), {"id": hermano_id})
         hermano_row = hermano_result.fetchone()
         if not hermano_row:
@@ -2062,48 +2066,40 @@ async def assign_hermano_as_leader(
         if not exhibitor_row:
             raise HTTPException(status_code=404, detail="Exhibidor no encontrado")
 
-        # Check if admin exists for this hermano - use raw SQL for compatibility
+        # Check if admin exists for this hermano using raw SQL only
         admin_check = await db.execute(sql_text("SELECT id FROM admins WHERE hermano_id = :hermano_id"), {"hermano_id": hermano_id_str})
-        admin_row = admin_check.fetchone()
-        admin_obj = None
-        if admin_row:
-            admin_obj_result = await db.execute(select(Admin).where(Admin.id == admin_row[0]))
-            admin_obj = admin_obj_result.scalar_one_or_none()
+        admin_id_row = admin_check.fetchone()
 
-        if not admin_obj:
-            # Create admin for hermano with generated username and password
-            import secrets
-            import string
-            from uuid import uuid4, UUID as UUIDType
+        if not admin_id_row:
+            # Create admin using raw SQL INSERT
+            admin_id = str(uuid4())
             username = f"encargado_{hermano_nombre[:10].lower().replace(' ', '_')}_{secrets.token_hex(3)}"
             password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+            password_hash = pwd_context.hash(password)
 
-            # Ensure hermano_id is UUID type for the model
-            if isinstance(hermano_id_str, str):
-                try:
-                    hermano_id_uuid = UUIDType(hermano_id_str)
-                except:
-                    hermano_id_uuid = hermano_id_str
-            else:
-                hermano_id_uuid = hermano_id_str
-
-            admin_obj = Admin(
-                id=uuid4(),
-                hermano_id=hermano_id_uuid,
-                username=username,
-                password_hash=pwd_context.hash(password),
-                role="encargado"
+            await db.execute(
+                sql_text("""
+                    INSERT INTO admins (id, user_id, hermano_id, username, password_hash, role)
+                    VALUES (:id, NULL, :hermano_id, :username, :password_hash, 'encargado')
+                """),
+                {
+                    "id": admin_id,
+                    "hermano_id": hermano_id_str,
+                    "username": username,
+                    "password_hash": password_hash
+                }
             )
-            db.add(admin_obj)
-            await db.flush()
+            await db.commit()
+        else:
+            admin_id = str(admin_id_row[0])
 
-        # Create ExhibitorLeader
+        # Validate position
         valid_positions = ["principal", "auxiliar", "publicaciones", "mantenimiento", "encargado",
                            "suplente", "encargado_turnos_principal", "encargado_turnos_remplazo", "publicaciones_mantenimiento"]
         if position not in valid_positions:
             raise HTTPException(status_code=400, detail=f"Position debe ser uno de: {', '.join(valid_positions)}")
 
-        # Check for unique positions - use raw SQL
+        # Check for unique positions
         unique_positions = ["principal", "encargado", "encargado_turnos_principal"]
         if position in unique_positions:
             existing_check = await db.execute(
@@ -2113,36 +2109,31 @@ async def assign_hermano_as_leader(
             if existing_check.fetchone():
                 raise HTTPException(status_code=400, detail=f"Ya existe un líder con posición {position} en este exhibidor")
 
-        # Check if hermano already has this position in this exhibitor - use raw SQL
-        # Convert UUID to string for SQLite compatibility
+        # Check if hermano already has this position
         existing_check = await db.execute(
             sql_text("SELECT id FROM exhibitor_leaders WHERE admin_id = :admin_id AND exhibitor_id = :exhibitor_id AND position = :position"),
-            {"admin_id": str(admin_obj.id), "exhibitor_id": exhibitor_id, "position": position}
+            {"admin_id": admin_id, "exhibitor_id": exhibitor_id, "position": position}
         )
         if existing_check.fetchone():
             raise HTTPException(status_code=400, detail="Este hermano ya tiene esta posición en este exhibidor")
 
-        # Ensure exhibitor_id is UUID type for the model
-        from uuid import UUID as UUIDType
-        if isinstance(exhibitor_id, str):
-            try:
-                exhibitor_id_uuid = UUIDType(exhibitor_id)
-            except:
-                exhibitor_id_uuid = exhibitor_id
-        else:
-            exhibitor_id_uuid = exhibitor_id
-
-        leader = ExhibitorLeader(
-            admin_id=admin_obj.id,
-            exhibitor_id=exhibitor_id_uuid,
-            position=position
+        # Create exhibitor leader using raw SQL
+        leader_id = str(uuid4())
+        await db.execute(
+            sql_text("""
+                INSERT INTO exhibitor_leaders (id, admin_id, exhibitor_id, position)
+                VALUES (:id, :admin_id, :exhibitor_id, :position)
+            """),
+            {
+                "id": leader_id,
+                "admin_id": admin_id,
+                "exhibitor_id": exhibitor_id,
+                "position": position
+            }
         )
-        db.add(leader)
         await db.commit()
 
-        # Get the ID without refresh to avoid ORM issues
-        leader_id = leader.id
-
+        # Log audit
         actor_id = admin.user_id or admin.hermano_id
         await log_audit(db, actor_id, "admin", "hermano_assigned_as_leader", {
             "hermano_id": hermano_id,
@@ -2151,12 +2142,12 @@ async def assign_hermano_as_leader(
         })
 
         return {
-            "id": str(leader_id),
-            "admin_id": str(leader.admin_id),
+            "id": leader_id,
+            "admin_id": admin_id,
             "hermano_id": hermano_id,
             "hermano_name": hermano_nombre,
-            "exhibitor_id": str(leader.exhibitor_id),
-            "position": leader.position
+            "exhibitor_id": exhibitor_id,
+            "position": position
         }
     except HTTPException:
         raise
