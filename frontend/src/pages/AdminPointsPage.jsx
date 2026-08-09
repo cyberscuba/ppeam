@@ -767,9 +767,10 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       if (!pointData.latitude || pointData.latitude === '') pointData.latitude = null
       if (!pointData.longitude || pointData.longitude === '') pointData.longitude = null
 
-      // Eliminar campos que no son válidos en el backend (solo para adicionales nuevos)
+      // Eliminar campos que no son válidos en el backend
       delete pointData.basePointName
       delete pointData.exhibitorNumber
+      delete pointData.max_exhibidores // No es válido en PATCH, se usa max_persons_per_slot
 
       if (initialPoint?.isAdditional && !initialPoint?.id) {
         if (!formData.basePointName || !formData.exhibitorNumber) {
