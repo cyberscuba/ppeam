@@ -746,6 +746,10 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     try {
       // Si es un exhibidor adicional, asegurar que el nombre esté completo
       let pointData = { ...formData }
+      // Convertir strings vacíos a null para campos numéricos opcionales
+      if (!pointData.latitude || pointData.latitude === '') pointData.latitude = null
+      if (!pointData.longitude || pointData.longitude === '') pointData.longitude = null
+
       if (initialPoint?.isAdditional && !initialPoint?.id) {
         if (!formData.basePointName || !formData.exhibitorNumber) {
           setNotification({
