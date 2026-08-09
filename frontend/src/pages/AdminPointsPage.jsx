@@ -1330,74 +1330,157 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                 </div>
               )}
 
-              {/* Agregar nuevo horario */}
-              <div className="border-t pt-4">
-                <h4 className="font-medium mb-3 text-base sm:text-lg">Agregar Nueva Franja Horaria</h4>
-                <div className="space-y-3">
-                  <div className="flex flex-col sm:flex-row gap-2">
+              {/* Agregar nuevo horario - Versión mejorada */}
+              <div className="border-t pt-6 mt-6">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+                  <h4 className="font-bold text-lg text-blue-900 mb-4 flex items-center gap-2">
+                    <Clock size={24} className="text-blue-600" />
+                    Crear Nueva Franja Horaria
+                  </h4>
+
+                  <div className="space-y-5">
                     {/* Selector de día */}
-                    <select
-                      value={newSchedule.weekday === null || newSchedule.weekday === undefined ? '' : newSchedule.weekday}
-                      onChange={(e) => setNewSchedule({ ...newSchedule, weekday: e.target.value === '' ? null : parseInt(e.target.value) })}
-                      className="input flex-1 sm:flex-none sm:w-40 py-2.5 text-base"
-                    >
-                      {weekdayOptions.map(opt => (
-                        <option key={opt.value === null ? 'null' : opt.value} value={opt.value === null ? '' : opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                    {/* Horarios - Solo horas en punto (minutos = 00) */}
-                    <input
-                      type="time"
-                      value={newSchedule.start_time}
-                      onChange={(e) => {
-                        let timeValue = e.target.value
-                        // Ajustar automáticamente los minutos a 00 si el usuario selecciona minutos diferentes
-                        if (timeValue && timeValue.length >= 5) {
-                          const [hours, minutes] = timeValue.split(':')
-                          if (minutes !== '00') {
-                            timeValue = `${hours}:00`
-                          }
-                        }
-                        setNewSchedule({ ...newSchedule, start_time: timeValue })
-                      }}
-                      step="3600"
-                      className="input flex-1 py-2.5 text-base"
-                      placeholder="Hora inicio"
-                      title="Solo se permiten horas en punto (ej: 11:00, 16:00)"
-                    />
-                    <input
-                      type="time"
-                      value={newSchedule.end_time}
-                      onChange={(e) => {
-                        let timeValue = e.target.value
-                        // Ajustar automáticamente los minutos a 00 si el usuario selecciona minutos diferentes
-                        if (timeValue && timeValue.length >= 5) {
-                          const [hours, minutes] = timeValue.split(':')
-                          if (minutes !== '00') {
-                            timeValue = `${hours}:00`
-                          }
-                        }
-                        setNewSchedule({ ...newSchedule, end_time: timeValue })
-                      }}
-                      step="3600"
-                      className="input flex-1 py-2.5 text-base"
-                      placeholder="Hora fin"
-                      title="Solo se permiten horas en punto (ej: 11:00, 16:00)"
-                    />
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        📅 Selecciona los días
+                      </label>
+                      <select
+                        value={newSchedule.weekday === null || newSchedule.weekday === undefined ? '' : newSchedule.weekday}
+                        onChange={(e) => setNewSchedule({ ...newSchedule, weekday: e.target.value === '' ? null : parseInt(e.target.value) })}
+                        className="input w-full py-3 text-base font-medium"
+                      >
+                        {weekdayOptions.map(opt => (
+                          <option key={opt.value === null ? 'null' : opt.value} value={opt.value === null ? '' : opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Selectores de hora con dropdown */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Hora de Inicio */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          ⏰ Hora Inicio
+                        </label>
+                        <div className="flex gap-1">
+                          <select
+                            value={newSchedule.start_time?.split(':')[0] || ''}
+                            onChange={(e) => {
+                              const minutes = newSchedule.start_time?.split(':')[1] || '00'
+                              setNewSchedule({ ...newSchedule, start_time: `${e.target.value}:${minutes}` })
+                            }}
+                            className="input flex-1 py-3 text-base font-semibold text-center"
+                          >
+                            <option value="">Hora</option>
+                            {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                              <option key={h} value={String(h).padStart(2, '0')}>
+                                {String(h).padStart(2, '0')}:00
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={newSchedule.start_time?.split(':')[1] || '00'}
+                            onChange={(e) => {
+                              const hours = newSchedule.start_time?.split(':')[0] || '06'
+                              setNewSchedule({ ...newSchedule, start_time: `${hours}:${e.target.value}` })
+                            }}
+                            className="input w-16 py-3 text-base font-semibold text-center"
+                          >
+                            <option value="00">:00</option>
+                            <option value="30">:30</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Hora de Fin */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          ⏰ Hora Fin
+                        </label>
+                        <div className="flex gap-1">
+                          <select
+                            value={newSchedule.end_time?.split(':')[0] || ''}
+                            onChange={(e) => {
+                              const minutes = newSchedule.end_time?.split(':')[1] || '00'
+                              setNewSchedule({ ...newSchedule, end_time: `${e.target.value}:${minutes}` })
+                            }}
+                            className="input flex-1 py-3 text-base font-semibold text-center"
+                          >
+                            <option value="">Hora</option>
+                            {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                              <option key={h} value={String(h).padStart(2, '0')}>
+                                {String(h).padStart(2, '0')}:00
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={newSchedule.end_time?.split(':')[1] || '00'}
+                            onChange={(e) => {
+                              const hours = newSchedule.end_time?.split(':')[0] || '08'
+                              setNewSchedule({ ...newSchedule, end_time: `${hours}:${e.target.value}` })
+                            }}
+                            className="input w-16 py-3 text-base font-semibold text-center"
+                          >
+                            <option value="00">:00</option>
+                            <option value="30">:30</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Información de duración */}
+                    {newSchedule.start_time && newSchedule.end_time && (() => {
+                      const [startH, startM] = newSchedule.start_time.split(':').map(Number)
+                      const [endH, endM] = newSchedule.end_time.split(':').map(Number)
+                      const startMins = startH * 60 + startM
+                      const endMins = endH * 60 + endM
+                      const durationMins = endMins - startMins
+                      const hours = Math.floor(durationMins / 60)
+                      const mins = durationMins % 60
+                      const isValid = durationMins >= 60 && durationMins <= 600
+
+                      return (
+                        <div className={`p-4 rounded-lg font-semibold text-center ${
+                          isValid
+                            ? 'bg-green-50 text-green-800 border border-green-300'
+                            : 'bg-orange-50 text-orange-800 border border-orange-300'
+                        }`}>
+                          ⏱️ Duración: {hours}h {mins > 0 ? `${mins}m` : ''}
+                          {!isValid && <span className="block text-sm mt-1">(Debe ser entre 1 y 10 horas)</span>}
+                        </div>
+                      )
+                    })()}
+
+                    {/* Botón de agregar */}
                     <button
                       type="button"
                       onClick={handleAddSchedule}
-                      className="btn btn-primary flex items-center justify-center gap-2 py-2.5 text-base"
+                      disabled={!newSchedule.start_time || !newSchedule.end_time || (() => {
+                        const [startH, startM] = (newSchedule.start_time || '').split(':').map(Number)
+                        const [endH, endM] = (newSchedule.end_time || '').split(':').map(Number)
+                        const startMins = startH * 60 + startM
+                        const endMins = endH * 60 + endM
+                        const durationMins = endMins - startMins
+                        return durationMins < 60 || durationMins > 600
+                      })()}
+                      className="w-full btn btn-primary py-3 text-base font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Plus size={20} />
-                      Agregar
+                      Crear Franja Horaria
                     </button>
+
+                    {/* Pista de uso */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-blue-900 font-semibold mb-2">💡 Consejos:</p>
+                      <ul className="text-xs text-blue-800 space-y-1">
+                        <li>✓ Solo se permiten minutos :00 y :30</li>
+                        <li>✓ Duración mínima: 1 hora | Duración máxima: 10 horas</li>
+                        <li>✓ Ejemplos: 8:00-10:00 (2h), 8:30-13:00 (4.5h), 14:30-22:00 (7.5h)</li>
+                      </ul>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500">
-                    💡 <strong>Ejemplo:</strong> Exhibidor 1 - Lunes y Martes: 8:00-10:00, 10:00-12:00, 12:00-16:00 | Exhibidor 2 - Sábado: 8:00-10:00, 10:00-13:00
-                  </p>
                 </div>
               </div>
             </div>
