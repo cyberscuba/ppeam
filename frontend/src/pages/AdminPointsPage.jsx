@@ -1138,25 +1138,17 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                   value={formData.photo_url}
                   onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
                   className="input w-full"
-                  placeholder="https://ejemplo.com/foto.jpg"
+                  placeholder="/uploads/archivo.jpg"
                 />
                 <p className="text-xs text-gray-600 mt-2">Ej: /uploads/archivo.jpg o https://ejemplo.com/foto.jpg</p>
               </div>
               {formData.photo_url && (
-                <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white flex flex-col items-center justify-center p-3 min-h-40">
+                <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white flex items-center justify-center p-3 min-h-40">
                   <img
                     src={formData.photo_url}
                     alt="Preview"
-                    className="max-h-36 max-w-full object-contain rounded"
-                    onError={(e) => {
-                      e.target.style.display = 'none'
-                      if (e.target.parentElement) {
-                        const errorDiv = document.createElement('div')
-                        errorDiv.className = 'text-center text-gray-500 text-sm flex flex-col items-center gap-2'
-                        errorDiv.innerHTML = '<p className="text-lg">❌</p><p>No se pudo cargar</p><p className="text-xs">Verifica la URL</p>'
-                        e.target.parentElement.appendChild(errorDiv)
-                      }
-                    }}
+                    className="max-h-36 max-w-full object-contain"
+                    onError={() => {}}
                   />
                 </div>
               )}

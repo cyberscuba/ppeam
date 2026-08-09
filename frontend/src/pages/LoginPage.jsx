@@ -19,7 +19,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await client.post('/auth/otp/request', { phone })
+      await client.post('/api/api/auth/otp/request', { phone })
       setStep('otp')
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al enviar código')
@@ -34,7 +34,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const { data } = await client.post('/auth/otp/verify', { phone, code: otp })
+      const { data } = await client.post('/api/api/auth/otp/verify', { phone, code: otp })
       setAuth(data.user, data.access_token)
       navigate('/')
     } catch (err) {

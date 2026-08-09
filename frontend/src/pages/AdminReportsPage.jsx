@@ -34,7 +34,7 @@ export default function AdminReportsPage() {
   const loadDashboardStats = async () => {
     setLoadingStats(true)
     try {
-      const { data } = await client.get('/admin/reports/dashboard', {
+      const { data } = await client.get('/api/api/admin/reports/dashboard', {
         params: { start_date: startDate, end_date: endDate }
       })
       setDashboardStats(data)
@@ -64,7 +64,7 @@ export default function AdminReportsPage() {
 
     setLoading(true)
     try {
-      const response = await client.get(`/admin/reports/${type}`, {
+      const response = await client.get(`/api/admin/reports/${type}`, {
         params: { start_date: startDate, end_date: endDate },
         responseType: 'blob'
       })

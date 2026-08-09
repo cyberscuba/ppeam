@@ -12,7 +12,7 @@ export default function AdminRoute({ children }) {
   useEffect(() => {
     const checkAdmin = async () => {
       if (!isAuthenticated || !token) {
-        navigate('/admin/login')
+        navigate('/api/admin/login')
         return
       }
       
@@ -25,7 +25,7 @@ export default function AdminRoute({ children }) {
       // Try to verify admin access by making a test request
       try {
         // Use a lightweight endpoint to verify admin access (just get pending requests)
-        await client.get('/admin/requests', {
+        await client.get('/api/api/admin/requests', {
           params: { status: 'pending' }
         })
         // If successful, update user to mark as admin
@@ -39,11 +39,11 @@ export default function AdminRoute({ children }) {
         if (error.response?.status === 403) {
           useAuthStore.getState().logout()
           alert('Acceso denegado. Se requieren permisos de administrador.')
-          navigate('/admin/login')
+          navigate('/api/admin/login')
         } else if (error.response?.status === 401) {
           // Token expired or invalid
           useAuthStore.getState().logout()
-          navigate('/admin/login')
+          navigate('/api/admin/login')
         } else {
           // For other errors (network, 404, etc), still allow access
           // The actual endpoints will handle the errors

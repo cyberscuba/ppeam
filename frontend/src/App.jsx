@@ -16,7 +16,7 @@ function App() {
   const location = useLocation()
   
   // No mostrar header en páginas de login
-  const hideHeader = location.pathname === '/admin/login' || location.pathname === '/login'
+  const hideHeader = location.pathname === '/api/admin/login' || location.pathname === '/login'
 
   return (
     <div className="min-h-screen">
@@ -24,12 +24,12 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/api/admin/login" element={<AdminLoginPage />} />
         <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
-        <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
-        <Route path="/admin/admins" element={<AdminRoute><AdminManagementPage /></AdminRoute>} />
-        <Route path="/admin/points" element={<AdminRoute><AdminPointsPage /></AdminRoute>} />
-        <Route path="/admin/reports" element={<AdminRoute><AdminReportsPage /></AdminRoute>} />
+        <Route path="/api/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
+        <Route path="/api/admin/admins" element={<AdminRoute><AdminManagementPage /></AdminRoute>} />
+        <Route path="/api/admin/points" element={<AdminRoute><AdminPointsPage /></AdminRoute>} />
+        <Route path="/api/admin/reports" element={<AdminRoute><AdminReportsPage /></AdminRoute>} />
       </Routes>
     </div>
   )

@@ -21,7 +21,7 @@ export default function AdminUsersPage() {
   const loadUsers = async () => {
     setLoading(true)
     try {
-      const { data } = await client.get('/admin/hermanos')
+      const { data } = await client.get('/api/api/admin/hermanos')
       logger.log('Hermanos cargados:', data.length)
       setUsers(data)
     } catch (error) {
@@ -41,9 +41,9 @@ export default function AdminUsersPage() {
   const handleSave = async (userData) => {
     try {
       if (editingUser) {
-        await client.patch(`/admin/hermanos/${editingUser.id}`, userData)
+        await client.patch(`/api/admin/hermanos/${editingUser.id}`, userData)
       } else {
-        await client.post('/admin/hermanos', userData)
+        await client.post('/api/api/admin/hermanos', userData)
       }
       setShowModal(false)
       setEditingUser(null)
@@ -55,7 +55,7 @@ export default function AdminUsersPage() {
 
   const handleToggleStatus = async (userId, currentStatus) => {
     try {
-      await client.patch(`/admin/hermanos/${userId}`, {
+      await client.patch(`/api/admin/hermanos/${userId}`, {
         is_active: !currentStatus
       })
       loadUsers()
@@ -74,7 +74,7 @@ export default function AdminUsersPage() {
       onConfirm: async () => {
         setConfirmationModal(null)
         try {
-          await client.delete(`/admin/hermanos/${userId}`)
+          await client.delete(`/api/admin/hermanos/${userId}`)
           loadUsers()
         } catch (error) {
           alert('Error: ' + (error.response?.data?.detail || error.message))

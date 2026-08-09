@@ -36,7 +36,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      navigate('/admin/login')
+      navigate('/api/admin/login')
       return
     }
     loadRequests()
@@ -46,19 +46,31 @@ export default function AdminPage() {
 
   const loadExhibitors = async () => {
     try {
-      const { data } = await client.get('/points?active_only=false')
+      const { data } = await client.get('/api/points?active_only=false')
+      if (!Array.isArray(data)) {
+        logger.error('Error: exhibitors response is not an array', data)
+        setExhibitors([])
+        return
+      }
       setExhibitors(data)
     } catch (error) {
       logger.error('Error loading exhibitors:', error)
+      setExhibitors([])
     }
   }
 
   const loadRequests = async () => {
     try {
-      const { data } = await client.get(`/admin/requests?status=${filter}`)
+      const { data } = await client.get(`/api/api/admin/requests?status=${filter}`)
+      if (!Array.isArray(data)) {
+        logger.error('Error: requests response is not an array', data)
+        setRequests([])
+        return
+      }
       setRequests(data)
     } catch (error) {
       logger.error('Error loading requests:', error)
+      setRequests([])
       if (error.response?.status === 403 || error.response?.status === 401) {
         setNotification({
           type: 'error',
@@ -67,7 +79,7 @@ export default function AdminPage() {
           details: []
         })
         useAuthStore.getState().logout()
-        navigate('/admin/login')
+        navigate('/api/admin/login')
       }
     } finally {
       setLoading(false)
@@ -76,12 +88,19 @@ export default function AdminPage() {
 
   const loadAvailabilitySummary = async () => {
     try {
-      const { data: points } = await client.get('/points')
+      const { data: points } = await client.get('/api/points')
+
+      if (!Array.isArray(points)) {
+        logger.error('Error: availability summary response is not an array', points)
+        setAvailabilitySummary({ available: 0, occupied: 0, total: 0, available_hours: 0, occupied_hours: 0, total_hours: 0 })
+        return
+      }
+
       let available = 0
       let occupied = 0
       let available_hours = 0
       let occupied_hours = 0
-      
+
       points.forEach(point => {
         point.schedules?.forEach(schedule => {
           if (schedule.availability) {
@@ -127,7 +146,7 @@ export default function AdminPage() {
       onConfirm: async () => {
         setConfirmationModal(null)
         try {
-          await client.post(`/admin/requests/${requestId}/approve`, { 
+          await client.post(`/api/admin/requests/${requestId}/approve`, { 
             action: 'reject', // Backend mantiene 'reject' pero frontend muestra 'liberar'
             item_ids: [itemId]
           })
@@ -218,7 +237,7 @@ export default function AdminPage() {
 
   const handleLogout = () => {
     useAuthStore.getState().logout()
-    navigate('/admin/login')
+    navigate('/api/admin/login')
   }
 
   const filteredRows = getFilteredRows()
@@ -240,28 +259,28 @@ export default function AdminPage() {
         {/* Navigation Buttons */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <button
-            onClick={() => navigate('/admin/users')}
+            onClick={() => navigate('/api/admin/users')}
             className="btn btn-secondary text-sm py-3 flex items-center justify-center gap-2"
           >
             <Users size={18} />
             Hermanos
           </button>
           <button
-            onClick={() => navigate('/admin/admins')}
+            onClick={() => navigate('/api/admin/admins')}
             className="btn btn-secondary text-sm py-3 flex items-center justify-center gap-2"
           >
             <Users size={18} />
             Administradores
           </button>
           <button
-            onClick={() => navigate('/admin/points')}
+            onClick={() => navigate('/api/admin/points')}
             className="btn btn-secondary text-sm py-3 flex items-center justify-center gap-2"
           >
             <MapPin size={18} />
             Exhibidores
           </button>
           <button
-            onClick={() => navigate('/admin/reports')}
+            onClick={() => navigate('/api/admin/reports')}
             className="btn btn-secondary text-sm py-3 flex items-center justify-center gap-2"
           >
             <BarChart3 size={18} />

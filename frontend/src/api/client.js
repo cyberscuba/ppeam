@@ -28,7 +28,7 @@ client.interceptors.response.use(
     // Only redirect on 401/403 if not already on login page and not during admin verification
     const currentPath = window.location.pathname
     const isLoginPage = currentPath.includes('/login')
-    const isAdminVerification = error.config?.url?.includes('/admin/requests') && error.config?.params?.limit === '1'
+    const isAdminVerification = error.config?.url?.includes('/api/admin/requests') && error.config?.params?.limit === '1'
     
     if ((error.response?.status === 401 || error.response?.status === 403) && 
         !isLoginPage && !isAdminVerification) {
@@ -49,7 +49,7 @@ client.interceptors.response.use(
       
       // Redirect to appropriate login based on current path
       if (currentPath.startsWith('/admin')) {
-        window.location.href = '/admin/login'
+        window.location.href = '/api/admin/login'
       } else {
         window.location.href = '/login'
       }

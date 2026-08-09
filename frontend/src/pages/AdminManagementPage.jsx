@@ -21,8 +21,8 @@ export default function AdminManagementPage() {
   const loadData = async () => {
     try {
       const [adminsRes, hermanosRes] = await Promise.all([
-        client.get('/admin/admins'),
-        client.get('/admin/hermanos')
+        client.get('/api/api/admin/admins'),
+        client.get('/api/api/admin/hermanos')
       ])
       setAdmins(adminsRes.data)
       setUsers(hermanosRes.data)
@@ -36,9 +36,9 @@ export default function AdminManagementPage() {
   const handleSave = async (adminData) => {
     try {
       if (editingAdmin) {
-        await client.patch(`/admin/admins/${editingAdmin.id}`, adminData)
+        await client.patch(`/api/admin/admins/${editingAdmin.id}`, adminData)
       } else {
-        await client.post('/admin/admins', adminData)
+        await client.post('/api/api/admin/admins', adminData)
       }
       setShowModal(false)
       setEditingAdmin(null)
@@ -52,11 +52,11 @@ export default function AdminManagementPage() {
     try {
       // Toggle the hermano or user status
       if (admin.hermano_id) {
-        await client.patch(`/admin/hermanos/${admin.hermano_id}`, {
+        await client.patch(`/api/admin/hermanos/${admin.hermano_id}`, {
           is_active: !admin.hermano.is_active
         })
       } else if (admin.user_id) {
-        await client.patch(`/admin/users/${admin.user_id}`, {
+        await client.patch(`/api/admin/users/${admin.user_id}`, {
           is_active: !admin.user.is_active
         })
       }
@@ -76,7 +76,7 @@ export default function AdminManagementPage() {
       onConfirm: async () => {
         setConfirmationModal(null)
         try {
-          await client.delete(`/admin/admins/${adminId}`)
+          await client.delete(`/api/admin/admins/${adminId}`)
           loadData()
         } catch (error) {
           alert('Error: ' + (error.response?.data?.detail || error.message))

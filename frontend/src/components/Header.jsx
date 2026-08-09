@@ -56,7 +56,7 @@ export default function Header({ showAdmin = false }) {
               </button>
             ) : (
               <button
-                onClick={() => navigate('/admin/login')}
+                onClick={() => navigate('/api/admin/login')}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm text-gray-600"
                 title="Acceso Administración"
               >
