@@ -1127,33 +1127,6 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
             </p>
           </div>
 
-          <div className="border-2 border-gray-200 rounded-lg p-4 bg-gray-50">
-            <label className="block text-gray-700 font-semibold mb-3">
-              📸 Foto del Exhibidor
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <input
-                  type="url"
-                  value={formData.photo_url}
-                  onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
-                  className="input w-full"
-                  placeholder="/uploads/archivo.jpg"
-                />
-                <p className="text-xs text-gray-600 mt-2">Ej: /uploads/archivo.jpg o https://ejemplo.com/foto.jpg</p>
-              </div>
-              {formData.photo_url && (
-                <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white flex items-center justify-center p-3 min-h-40">
-                  <img
-                    src={formData.photo_url}
-                    alt="Preview"
-                    className="max-h-36 max-w-full object-contain"
-                    onError={() => {}}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* Capacidad de Personas por Turno */}
           <div className="grid grid-cols-2 gap-4">
