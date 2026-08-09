@@ -175,7 +175,8 @@ async def admin_login(
     result = await db.execute(
         select(Admin).where(Admin.username == data.username)
     )
-    admin = result.scalar_one_or_none()
+    admins_list = result.scalars().all()
+    admin = admins_list[0] if admins_list else None
     
     if not admin:
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
@@ -187,27 +188,49 @@ async def admin_login(
     # Get user or hermano
     user = None
     hermano = None
-    
+
+    user_data = None
+    hermano_data = None
+
     if admin.user_id:
-        result = await db.execute(select(User).where(User.id == admin.user_id))
-        user = result.scalar_one_or_none()
-        if not user or not user.is_active:
+        from sqlalchemy import text
+        # Use raw SQL since ORM seems to have issues with async
+        result = await db.execute(text(f"SELECT id, full_name, phone, email, is_active FROM users WHERE id = '{admin.user_id}'"))
+        user_row = result.fetchone()
+        if not user_row:
+            raise HTTPException(status_code=403, detail="Usuario not found")
+        user_id, full_name_val, phone_val, email_val, is_active_val = user_row
+        if not is_active_val:
             raise HTTPException(status_code=403, detail="Usuario inactivo")
-    
+        user_data = {
+            "id": user_id,
+            "full_name": full_name_val,
+            "phone": phone_val,
+            "email": email_val
+        }
+
     if admin.hermano_id:
-        result = await db.execute(select(Hermano).where(Hermano.id == admin.hermano_id))
-        hermano = result.scalar_one_or_none()
-        if not hermano or not hermano.is_active:
+        from sqlalchemy import text
+        result = await db.execute(text(f"SELECT id, nombre, telefono, is_active FROM hermanos WHERE id = '{admin.hermano_id}'"))
+        herm_row = result.fetchone()
+        if not herm_row:
+            raise HTTPException(status_code=403, detail="Hermano not found")
+        herm_id, nombre_val, telefono_val, is_active_val = herm_row
+        if not is_active_val:
             raise HTTPException(status_code=403, detail="Hermano inactivo")
-    
-    if not user and not hermano:
+        hermano_data = {
+            "id": herm_id,
+            "nombre": nombre_val,
+            "telefono": telefono_val
+        }
+
+    if not user_data and not hermano_data:
         raise HTTPException(status_code=403, detail="Admin sin usuario o hermano asociado")
-    
+
     # Create access token with admin flag
-    # Use user_id if available, otherwise use hermano_id with a prefix
-    token_sub = str(user.id) if user else f"hermano_{admin.hermano_id}"
-    phone = user.phone if user else hermano.telefono
-    full_name = user.full_name if user else hermano.nombre
+    token_sub = str(user_data["id"]) if user_data else f"hermano_{admin.hermano_id}"
+    phone = user_data["phone"] if user_data else hermano_data["telefono"]
+    full_name = user_data["full_name"] if user_data else hermano_data["nombre"]
     
     # Admin tokens expire in 8 hours (480 minutes) instead of 15 minutes
     access_token = create_access_token({
@@ -224,10 +247,10 @@ async def admin_login(
         "access_token": access_token,
         "token_type": "bearer",
         "user": {
-            "id": str(user.id) if user else str(hermano.id),
+            "id": str(user_data["id"]) if user_data else str(hermano_data["id"]),
             "full_name": full_name,
             "phone": phone,
-            "email": user.email if user else None,
+            "email": user_data["email"] if user_data else None,
             "is_admin": True,
             "role": admin.role
         }
