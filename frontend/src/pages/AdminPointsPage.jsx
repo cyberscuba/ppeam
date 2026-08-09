@@ -1502,7 +1502,6 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                                 className="w-16 bg-transparent border-0 text-lg font-bold text-gray-900 focus:ring-0 p-0"
                               >
                                 <option value="00">00</option>
-                                <option value="30">30</option>
                               </select>
                             </div>
                           </div>
@@ -1536,7 +1535,6 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                                 className="w-16 bg-transparent border-0 text-lg font-bold text-gray-900 focus:ring-0 p-0"
                               >
                                 <option value="00">00</option>
-                                <option value="30">30</option>
                               </select>
                             </div>
                           </div>
