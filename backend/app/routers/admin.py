@@ -2144,8 +2144,8 @@ async def assign_hermano_as_leader(
         return {
             "id": leader_id,
             "admin_id": admin_id,
+            "admin_name": hermano_nombre,
             "hermano_id": hermano_id,
-            "hermano_name": hermano_nombre,
             "exhibitor_id": exhibitor_id,
             "position": position
         }
