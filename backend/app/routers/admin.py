@@ -2110,14 +2110,26 @@ async def assign_hermano_as_leader(
         if existing_check.fetchone():
             raise HTTPException(status_code=400, detail="Este hermano ya tiene esta posición en este exhibidor")
 
+        # Ensure exhibitor_id is UUID type for the model
+        from uuid import UUID as UUIDType
+        if isinstance(exhibitor_id, str):
+            try:
+                exhibitor_id_uuid = UUIDType(exhibitor_id)
+            except:
+                exhibitor_id_uuid = exhibitor_id
+        else:
+            exhibitor_id_uuid = exhibitor_id
+
         leader = ExhibitorLeader(
             admin_id=admin_obj.id,
-            exhibitor_id=exhibitor_id,
+            exhibitor_id=exhibitor_id_uuid,
             position=position
         )
         db.add(leader)
         await db.commit()
-        await db.refresh(leader)
+
+        # Get the ID without refresh to avoid ORM issues
+        leader_id = leader.id
 
         actor_id = admin.user_id or admin.hermano_id
         await log_audit(db, actor_id, "admin", "hermano_assigned_as_leader", {
@@ -2127,7 +2139,7 @@ async def assign_hermano_as_leader(
         })
 
         return {
-            "id": str(leader.id),
+            "id": str(leader_id),
             "admin_id": str(leader.admin_id),
             "hermano_id": hermano_id,
             "hermano_name": hermano_nombre,
