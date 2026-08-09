@@ -519,12 +519,14 @@ class ExhibitorUpdate(BaseModel):
     is_active: bool | None = None
 
 class ScheduleCreate(BaseModel):
-    weekday: int | None = None
+    type: str  # all_days, weekends, specific_day
+    weekday: int | None = None  # 0-6 for specific_day, NULL for all_days, 5&6 for weekends
     start_time: str  # Format: "HH:MM:SS"
     end_time: str    # Format: "HH:MM:SS"
     is_active: bool = True
 
 class ScheduleUpdate(BaseModel):
+    type: str | None = None
     weekday: int | None = None
     start_time: str | None = None
     end_time: str | None = None
@@ -613,6 +615,7 @@ async def list_points(
                 {
                     "id": str(s.id),
                     "exhibitor_id": str(s.exhibitor_id),
+                    "type": s.type,
                     "weekday": s.weekday,
                     "start_time": str(s.start_time) if s.start_time else None,
                     "end_time": str(s.end_time) if s.end_time else None,
@@ -699,7 +702,7 @@ async def get_exhibitor(
     exhibitor_id = exhibitor_row[0]
 
     # Get schedules
-    schedules_result = await db.execute(text(f"SELECT id, weekday, start_time, end_time, is_active FROM schedules WHERE exhibitor_id = '{exhibitor_id}'"))
+    schedules_result = await db.execute(text(f"SELECT id, type, weekday, start_time, end_time, is_active FROM schedules WHERE exhibitor_id = '{exhibitor_id}'"))
     schedules_rows = schedules_result.fetchall()
 
     return {
@@ -716,10 +719,11 @@ async def get_exhibitor(
         "schedules": [
             {
                 "id": str(s[0]),
-                "weekday": s[1],
-                "start_time": str(s[2]),
-                "end_time": str(s[3]),
-                "is_active": s[4]
+                "type": s[1],
+                "weekday": s[2],
+                "start_time": str(s[3]),
+                "end_time": str(s[4]),
+                "is_active": s[5]
             }
             for s in schedules_rows
         ]
@@ -871,21 +875,63 @@ async def create_schedule(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM:SS")
     
-    # Validar que las horas estén en punto (minutos = 0)
-    if start_time.minute != 0:
+    # Validar tipo de franja
+    valid_types = ['all_days', 'weekends', 'specific_day']
+    if data.type not in valid_types:
         raise HTTPException(
-            status_code=400, 
-            detail=f"La hora de inicio debe estar en punto (minutos = 00). Se recibió {start_time.strftime('%H:%M')}. Use {start_time.hour:02d}:00"
+            status_code=400,
+            detail=f"Tipo de franja inválido. Debe ser uno de: {', '.join(valid_types)}"
         )
-    if end_time.minute != 0:
+
+    # Validar minutos: :00 o :30
+    if start_time.minute not in [0, 30]:
         raise HTTPException(
-            status_code=400, 
-            detail=f"La hora de fin debe estar en punto (minutos = 00). Se recibió {end_time.strftime('%H:%M')}. Use {end_time.hour:02d}:00"
+            status_code=400,
+            detail=f"La hora de inicio debe ser en punto o media hora (:00 o :30). Se recibió {start_time.strftime('%H:%M')}"
         )
-    
+    if end_time.minute not in [0, 30]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La hora de fin debe ser en punto o media hora (:00 o :30). Se recibió {end_time.strftime('%H:%M')}"
+        )
+
+    # Validar rango: 6:00 AM a 10:00 PM (22:00)
+    min_hour = 6  # 6 AM
+    max_hour = 22  # 10 PM
+    if start_time.hour < min_hour or (start_time.hour == min_hour and start_time.minute < 0):
+        raise HTTPException(
+            status_code=400,
+            detail=f"La hora de inicio debe ser como mínimo 06:00 (6:00 AM). Se recibió {start_time.strftime('%H:%M')}"
+        )
+    if end_time.hour > max_hour or (end_time.hour == max_hour and end_time.minute > 0):
+        raise HTTPException(
+            status_code=400,
+            detail=f"La hora de fin debe ser como máximo 22:00 (10:00 PM). Se recibió {end_time.strftime('%H:%M')}"
+        )
+
     # Validar que end_time sea mayor que start_time
     if end_time <= start_time:
         raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio")
+
+    # Validar weekday según tipo
+    if data.type == 'specific_day':
+        if data.weekday is None or data.weekday < 0 or data.weekday > 6:
+            raise HTTPException(
+                status_code=400,
+                detail="Para tipo 'specific_day', weekday debe ser un número entre 0 (Lunes) y 6 (Domingo)"
+            )
+    elif data.type == 'weekends':
+        if data.weekday is not None and data.weekday not in [5, 6]:
+            raise HTTPException(
+                status_code=400,
+                detail="Para tipo 'weekends', weekday debe ser 5 (Sábado) o 6 (Domingo)"
+            )
+    elif data.type == 'all_days':
+        if data.weekday is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Para tipo 'all_days', weekday debe ser NULL (no se especifica día)"
+            )
     
     # Verificar solapamiento con horarios existentes del mismo exhibidor
     # Obtener todos los horarios del exhibidor que podrían solaparse
@@ -931,6 +977,7 @@ async def create_schedule(
     
     schedule = Schedule(
         exhibitor_id=UUID(point_id),
+        type=data.type,
         weekday=data.weekday,
         start_time=start_time,
         end_time=end_time,
@@ -939,11 +986,12 @@ async def create_schedule(
     db.add(schedule)
     await db.commit()
     await db.refresh(schedule)
-    
+
     await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_created", {"schedule_id": str(schedule.id), "point_id": str(point_id)})
-    
+
     return {
         "id": str(schedule.id),
+        "type": schedule.type,
         "weekday": schedule.weekday,
         "start_time": str(schedule.start_time),
         "end_time": str(schedule.end_time),
@@ -967,11 +1015,20 @@ async def update_schedule(
     
     # Preparar valores actualizados (usar los nuevos o mantener los existentes)
     from datetime import time as dt_time
+    new_type = data.type if data.type is not None else schedule.type
     new_weekday = data.weekday if data.weekday is not None else schedule.weekday
     new_start_time = dt_time.fromisoformat(data.start_time) if data.start_time else schedule.start_time
     new_end_time = dt_time.fromisoformat(data.end_time) if data.end_time else schedule.end_time
-    
-    # Validar que los minutos sean :00 o :30
+
+    # Validar tipo de franja
+    valid_types = ['all_days', 'weekends', 'specific_day']
+    if new_type not in valid_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de franja inválido. Debe ser uno de: {', '.join(valid_types)}"
+        )
+
+    # Validar minutos: :00 o :30
     if data.start_time and new_start_time.minute not in [0, 30]:
         raise HTTPException(
             status_code=400,
@@ -982,10 +1039,44 @@ async def update_schedule(
             status_code=400,
             detail=f"La hora de fin debe ser en punto o media hora (:00 o :30). Se recibió {new_end_time.strftime('%H:%M')}"
         )
-    
+
+    # Validar rango: 6:00 AM a 10:00 PM (22:00)
+    min_hour = 6
+    max_hour = 22
+    if new_start_time.hour < min_hour or (new_start_time.hour == min_hour and new_start_time.minute < 0):
+        raise HTTPException(
+            status_code=400,
+            detail=f"La hora de inicio debe ser como mínimo 06:00 (6:00 AM). Se recibió {new_start_time.strftime('%H:%M')}"
+        )
+    if new_end_time.hour > max_hour or (new_end_time.hour == max_hour and new_end_time.minute > 0):
+        raise HTTPException(
+            status_code=400,
+            detail=f"La hora de fin debe ser como máximo 22:00 (10:00 PM). Se recibió {new_end_time.strftime('%H:%M')}"
+        )
+
     # Validar que end_time sea mayor que start_time
     if new_end_time <= new_start_time:
         raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio")
+
+    # Validar weekday según tipo
+    if new_type == 'specific_day':
+        if new_weekday is None or new_weekday < 0 or new_weekday > 6:
+            raise HTTPException(
+                status_code=400,
+                detail="Para tipo 'specific_day', weekday debe ser un número entre 0 (Lunes) y 6 (Domingo)"
+            )
+    elif new_type == 'weekends':
+        if new_weekday is not None and new_weekday not in [5, 6]:
+            raise HTTPException(
+                status_code=400,
+                detail="Para tipo 'weekends', weekday debe ser 5 (Sábado) o 6 (Domingo)"
+            )
+    elif new_type == 'all_days':
+        if new_weekday is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Para tipo 'all_days', weekday debe ser NULL (no se especifica día)"
+            )
 
     # Solo validar solapamiento si se están modificando horas/día y el horario va a estar ACTIVO
     # Si solo se desactiva, no necesita validación de solapamiento
@@ -1031,29 +1122,33 @@ async def update_schedule(
                     )
     
     # Aplicar cambios
+    if data.type is not None:
+        schedule.type = data.type
+
     if data.weekday is not None:
         schedule.weekday = data.weekday
-    
+
     if data.start_time is not None:
         try:
             schedule.start_time = dt_time.fromisoformat(data.start_time)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM:SS")
-    
+
     if data.end_time is not None:
         try:
             schedule.end_time = dt_time.fromisoformat(data.end_time)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM:SS")
-    
+
     if data.is_active is not None:
         schedule.is_active = data.is_active
-    
+
     await db.commit()
     await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_updated", {"schedule_id": str(schedule_id), "is_active": schedule.is_active})
-    
+
     return {
         "id": str(schedule.id),
+        "type": schedule.type,
         "weekday": schedule.weekday,
         "start_time": str(schedule.start_time),
         "end_time": str(schedule.end_time),

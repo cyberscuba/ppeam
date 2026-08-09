@@ -77,15 +77,16 @@ class Exhibitor(Base):
 class Schedule(Base):
     __tablename__ = "schedules"
     __table_args__ = {'extend_existing': True}
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     exhibitor_id = Column(UUID(as_uuid=True), ForeignKey("exhibitors.id", ondelete="CASCADE"), nullable=False)
-    weekday = Column(Integer)
+    type = Column(String(20), nullable=False, default='specific_day')  # all_days, weekends, specific_day
+    weekday = Column(Integer)  # 0-6 for specific_day, NULL for all_days, 5&6 for weekends
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, index=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    
+
     exhibitor = relationship("Exhibitor", back_populates="schedules", lazy="select")
     slots = relationship("Slot", back_populates="schedule")
 
