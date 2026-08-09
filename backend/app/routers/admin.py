@@ -1,19 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, Date, cast
 from typing import List
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import date, datetime
+import re
 
 from app.database import get_db
 from app.models import Request, RequestItem, User, Admin, Exhibitor, Schedule, Hermano, Slot, ExhibitorLeader
 from app.utils.gender_detector import detect_gender_from_name, get_gender_label
 from app.utils.security import get_current_user
 from app.utils.audit import log_audit
-from app.worker import send_notification_task, notify_slot_liberated_task
+from app.scheduler import send_notification, notify_slot_liberated
+from app.routers.requests import check_time_conflict
 from passlib.context import CryptContext
+import asyncio
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -46,10 +49,10 @@ async def get_current_admin(
             hermano_id_str = user_id_str.replace("hermano_", "")
             from uuid import UUID
             try:
-                hermano_id = UUID(hermano_id_str)
+                hermano_id = str(UUID(hermano_id_str))
             except ValueError:
                 raise HTTPException(status_code=403, detail="Admin access required")
-            
+
             result = await db.execute(
                 select(Admin).where(Admin.hermano_id == hermano_id)
             )
@@ -58,10 +61,10 @@ async def get_current_admin(
             # Regular user token - find admin by user_id
             from uuid import UUID
             try:
-                user_id = UUID(user_id_str)
+                user_id = str(UUID(user_id_str))
             except ValueError:
                 raise HTTPException(status_code=403, detail="Admin access required")
-            
+
             result = await db.execute(
                 select(Admin).where(Admin.user_id == user_id)
             )
@@ -86,6 +89,9 @@ class ApproveRequest(BaseModel):
 @router.get("/requests")
 async def get_all_requests(
     status: str = None,
+    current_month_only: bool = True,  # Por defecto, solo mostrar mes actual
+    year: int = None,  # Permite filtrar por año específico
+    month: int = None,  # Permite filtrar por mes específico
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -94,11 +100,16 @@ async def get_all_requests(
     Si status='approved', muestra requests con items aprobados.
     Si status='cancelled', muestra requests con items cancelados/liberados.
     Si status=None, muestra todos los requests.
+    
+    Por defecto (current_month_only=True), solo muestra turnos del mes actual.
+    Use current_month_only=False para ver todos los turnos históricos.
     """
+    from datetime import date as date_type
+    import calendar as cal_module
     # Si es super_admin, puede ver todas las solicitudes
-    # Si es lider_exhibidor, solo ve solicitudes de sus exhibidores asignados
+    # Si es encargado, solo ve solicitudes de sus exhibidores asignados
     exhibitor_ids = None
-    if admin.role == "lider_exhibidor":
+    if admin.role in ("encargado", "lider_exhibidor"):
         # Obtener exhibidores asignados a este líder
         leaders_result = await db.execute(
             select(ExhibitorLeader.exhibitor_id).where(ExhibitorLeader.admin_id == admin.id)
@@ -127,6 +138,22 @@ async def get_all_requests(
             .join(Exhibitor, Slot.exhibitor_id == Exhibitor.id)
             .where(RequestItem.request_id == req.id)
         )
+        
+        # Filtro por mes actual (por defecto) o mes específico
+        if current_month_only:
+            today = date_type.today()
+            target_year = year or today.year
+            target_month = month or today.month
+            
+            # Calcular primer y último día del mes
+            first_day = date_type(target_year, target_month, 1)
+            last_day = date_type(target_year, target_month, cal_module.monthrange(target_year, target_month)[1])
+            
+            # Aplicar filtro de fecha
+            items_query = items_query.where(
+                Slot.slot_date >= first_day,
+                Slot.slot_date <= last_day
+            )
         
         # Si es lider_exhibidor, filtrar por exhibidores asignados
         if exhibitor_ids is not None:
@@ -239,8 +266,8 @@ async def approve_request(
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
     
-    # Si es lider_exhibidor, verificar que los items pertenezcan a sus exhibidores
-    if admin.role == "lider_exhibidor":
+    # Si es encargado, verificar que los items pertenezcan a sus exhibidores
+    if admin.role in ("encargado", "lider_exhibidor"):
         leaders_result = await db.execute(
             select(ExhibitorLeader.exhibitor_id).where(ExhibitorLeader.admin_id == admin.id)
         )
@@ -285,6 +312,71 @@ async def approve_request(
     
     # Variable para guardar IDs de items liberados (para notificación masiva)
     liberated_item_ids = []
+    
+    # ── VALIDAR SOLAPAMIENTO DE HORARIOS ANTES DE APROBAR ─────────────────
+    # Si se está aprobando (total o parcial), verificar que no haya conflictos de horario
+    if data.action in ("approve", "partial"):
+        # Determinar qué items se van a aprobar
+        items_to_approve = []
+        if data.item_ids:
+            approved_ids = [UUID(id) for id in data.item_ids]
+            for item in items:
+                if item.id in approved_ids:
+                    items_to_approve.append(item)
+        else:
+            # Se aprueban todos los items que no estén ya aprobados
+            for item in items:
+                if item.status != "approved":
+                    items_to_approve.append(item)
+        
+        # Para cada item que se va a aprobar, verificar solapamiento
+        conflicts = []
+        for item in items_to_approve:
+            # Obtener información del slot, schedule y exhibidor
+            item_info_result = await db.execute(
+                select(RequestItem, Slot, Schedule, Exhibitor)
+                .join(Slot, RequestItem.slot_id == Slot.id)
+                .join(Schedule, Slot.schedule_id == Schedule.id)
+                .join(Exhibitor, Slot.exhibitor_id == Exhibitor.id)
+                .where(RequestItem.id == item.id)
+            )
+            item_info = item_info_result.first()
+            
+            if not item_info:
+                continue
+            
+            _, slot, schedule, exhibitor = item_info
+            
+            # Verificar solapamiento con otros turnos del usuario
+            conflict_check = await check_time_conflict(
+                db=db,
+                user_id=request.user_id,
+                slot_date=slot.slot_date,
+                start_time=schedule.start_time,
+                end_time=schedule.end_time,
+                exclude_request_id=str(request.id)
+            )
+            
+            if conflict_check['has_conflict']:
+                conflicts.append({
+                    "item_id": str(item.id),
+                    "exhibidor": exhibitor.name,
+                    "fecha": slot.slot_date.isoformat(),
+                    "hora_inicio": str(schedule.start_time)[:5],
+                    "hora_fin": str(schedule.end_time)[:5],
+                    "message": conflict_check['conflict_info']['message']
+                })
+        
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "No se puede aprobar la solicitud debido a conflictos de horario",
+                    "conflicts": conflicts,
+                    "error_code": "TIME_CONFLICT"
+                }
+            )
+    # ────────────────────────────────────────────────────────────────────────
     
     if data.action == "approve":
         # Si se especifican item_ids, solo aprobar esos items
@@ -361,13 +453,13 @@ async def approve_request(
     await log_audit(db, actor_id, "admin", f"request_{data.action}", {"request_id": str(request.id), "item_ids": data.item_ids})
     
     # Send notification
-    send_notification_task.delay(str(request.id), f"request_{request.status}")
-    
+    asyncio.create_task(send_notification(str(request.id), f"request_{request.status}"))
+
     # Si se liberaron turnos, notificar a todos los hermanos
     if data.action == "reject" and liberated_item_ids:
         for item_id in liberated_item_ids:
             # Enviar notificación masiva para cada turno liberado
-            notify_slot_liberated_task.delay(item_id)
+            asyncio.create_task(notify_slot_liberated(item_id))
     
     return {"message": "Request updated", "status": request.status}
 
@@ -413,6 +505,109 @@ class ScheduleUpdate(BaseModel):
     end_time: str | None = None
     is_active: bool | None = None
 
+@router.get("/exhibitors")
+async def list_exhibitors(
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+    active_only: bool = False,
+    include_all_schedules: bool = False
+):
+    """List all exhibitors"""
+    query = select(Exhibitor)
+    if active_only:
+        query = query.where(Exhibitor.is_active == True)
+    query = query.order_by(Exhibitor.code)
+
+    result = await db.execute(query)
+    exhibitors = result.scalars().all()
+
+    return [
+        {
+            "id": str(e.id),
+            "code": e.code,
+            "name": e.name,
+            "description": e.description,
+            "latitude": float(e.latitude) if e.latitude else None,
+            "longitude": float(e.longitude) if e.longitude else None,
+            "photo_url": e.photo_url,
+            "is_active": e.is_active,
+            "max_exhibidores": e.max_exhibidores,
+            "min_persons_per_slot": e.min_persons_per_slot,
+            "max_persons_per_slot": e.max_persons_per_slot,
+        }
+        for e in exhibitors
+    ]
+
+@router.get("/points")
+async def list_points(
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+    active_only: bool = False,
+    include_all_schedules: bool = False
+):
+    """List all points (alias for exhibitors)"""
+    query = select(Exhibitor)
+    if active_only:
+        query = query.where(Exhibitor.is_active == True)
+    query = query.order_by(Exhibitor.code)
+
+    result = await db.execute(query)
+    exhibitors = result.scalars().all()
+
+    response = []
+    for e in exhibitors:
+        try:
+            # Get schedules for this exhibitor
+            schedules_result = await db.execute(
+                select(Schedule).where(Schedule.exhibitor_id == e.id).order_by(Schedule.id)
+            )
+            schedules = schedules_result.scalars().all() or []
+
+            # Get leaders for this exhibitor
+            leaders_result = await db.execute(
+                select(ExhibitorLeader).where(ExhibitorLeader.exhibitor_id == e.id)
+            )
+            leaders = leaders_result.scalars().all() or []
+        except Exception as err:
+            schedules = []
+            leaders = []
+
+        response.append({
+            "id": str(e.id),
+            "code": e.code,
+            "name": e.name,
+            "description": e.description,
+            "latitude": float(e.latitude) if e.latitude else None,
+            "longitude": float(e.longitude) if e.longitude else None,
+            "photo_url": e.photo_url,
+            "is_active": e.is_active,
+            "max_exhibidores": e.max_exhibidores,
+            "min_persons_per_slot": e.min_persons_per_slot,
+            "max_persons_per_slot": e.max_persons_per_slot,
+            "schedules": [
+                {
+                    "id": str(s.id),
+                    "exhibitor_id": str(s.exhibitor_id),
+                    "weekday": s.weekday,
+                    "start_time": str(s.start_time) if s.start_time else None,
+                    "end_time": str(s.end_time) if s.end_time else None,
+                    "is_active": s.is_active,
+                }
+                for s in schedules
+            ] if schedules else [],
+            "leaders": [
+                {
+                    "id": str(l.id),
+                    "exhibitor_id": str(l.exhibitor_id),
+                    "admin_id": str(l.admin_id) if l.admin_id else None,
+                    "position": l.position,
+                }
+                for l in leaders
+            ] if leaders else [],
+        })
+
+    return response
+
 @router.post("/points")
 async def create_exhibitor(
     data: ExhibitorCreate,
@@ -445,7 +640,7 @@ async def create_exhibitor(
     await db.commit()
     await db.refresh(exhibitor)
     
-    await log_audit(db, admin.user_id, "admin", "exhibitor_created", {"exhibitor_id": str(exhibitor.id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "exhibitor_created", {"exhibitor_id": str(exhibitor.id)})
     
     return {
         "id": str(exhibitor.id),
@@ -467,7 +662,7 @@ async def get_exhibitor(
     db: AsyncSession = Depends(get_db)
 ):
     """Get exhibitor (punto de exhibidor) by ID with schedules"""
-    result = await db.execute(select(Exhibitor).where(Exhibitor.id == UUID(point_id)))
+    result = await db.execute(select(Exhibitor).where(Exhibitor.id == point_id))
     exhibitor = result.scalar_one_or_none()
     
     if not exhibitor:
@@ -508,7 +703,7 @@ async def update_exhibitor(
     db: AsyncSession = Depends(get_db)
 ):
     """Update exhibitor (punto de exhibidor)"""
-    result = await db.execute(select(Exhibitor).where(Exhibitor.id == UUID(point_id)))
+    result = await db.execute(select(Exhibitor).where(Exhibitor.id == point_id))
     exhibitor = result.scalar_one_or_none()
     
     if not exhibitor:
@@ -548,7 +743,7 @@ async def update_exhibitor(
     await db.refresh(exhibitor)
     
     # Log audit
-    await log_audit(db, admin.user_id, "admin", "exhibitor_updated", {"exhibitor_id": str(exhibitor.id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "exhibitor_updated", {"exhibitor_id": str(exhibitor.id)})
     
     return {
         "id": str(exhibitor.id),
@@ -578,7 +773,7 @@ async def delete_exhibitor(
     
     await db.execute(delete(Exhibitor).where(Exhibitor.id == UUID(point_id)))
     await db.commit()
-    await log_audit(db, admin.user_id, "admin", "exhibitor_deleted", {"exhibitor_id": str(point_id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "exhibitor_deleted", {"exhibitor_id": str(point_id)})
     
     return {"message": "Exhibitor deleted"}
 
@@ -674,7 +869,7 @@ async def create_schedule(
     await db.commit()
     await db.refresh(schedule)
     
-    await log_audit(db, admin.user_id, "admin", "schedule_created", {"schedule_id": str(schedule.id), "point_id": str(point_id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_created", {"schedule_id": str(schedule.id), "point_id": str(point_id)})
     
     return {
         "id": str(schedule.id),
@@ -692,7 +887,8 @@ async def update_schedule(
     db: AsyncSession = Depends(get_db)
 ):
     """Update schedule"""
-    result = await db.execute(select(Schedule).where(Schedule.id == UUID(schedule_id)))
+    # SQLite almacena UUIDs como VARCHAR, comparar como string directamente
+    result = await db.execute(select(Schedule).where(Schedule.id == schedule_id))
     schedule = result.scalar_one_or_none()
     
     if not schedule:
@@ -704,58 +900,64 @@ async def update_schedule(
     new_start_time = dt_time.fromisoformat(data.start_time) if data.start_time else schedule.start_time
     new_end_time = dt_time.fromisoformat(data.end_time) if data.end_time else schedule.end_time
     
-    # Validar que las horas estén en punto (minutos = 0)
-    if data.start_time and new_start_time.minute != 0:
+    # Validar que los minutos sean :00 o :30
+    if data.start_time and new_start_time.minute not in [0, 30]:
         raise HTTPException(
-            status_code=400, 
-            detail=f"La hora de inicio debe estar en punto (minutos = 00). Se recibió {new_start_time.strftime('%H:%M')}. Use {new_start_time.hour:02d}:00"
+            status_code=400,
+            detail=f"La hora de inicio debe ser en punto o media hora (:00 o :30). Se recibió {new_start_time.strftime('%H:%M')}"
         )
-    if data.end_time and new_end_time.minute != 0:
+    if data.end_time and new_end_time.minute not in [0, 30]:
         raise HTTPException(
-            status_code=400, 
-            detail=f"La hora de fin debe estar en punto (minutos = 00). Se recibió {new_end_time.strftime('%H:%M')}. Use {new_end_time.hour:02d}:00"
+            status_code=400,
+            detail=f"La hora de fin debe ser en punto o media hora (:00 o :30). Se recibió {new_end_time.strftime('%H:%M')}"
         )
     
     # Validar que end_time sea mayor que start_time
     if new_end_time <= new_start_time:
         raise HTTPException(status_code=400, detail="La hora de fin debe ser posterior a la hora de inicio")
-    
-    # Verificar solapamiento con otros horarios del mismo exhibidor (excluyendo el actual)
-    existing_schedules_query = select(Schedule).where(
-        Schedule.exhibitor_id == schedule.exhibitor_id,
-        Schedule.id != UUID(schedule_id),  # Excluir el horario actual
-        Schedule.is_active == True  # Solo verificar con horarios activos
-    )
-    
-    # Si el horario actualizado tiene un weekday específico, solo verificar con horarios del mismo día o null
-    if new_weekday is not None:
-        existing_schedules_query = existing_schedules_query.where(
-            (Schedule.weekday == new_weekday) | (Schedule.weekday.is_(None))
+
+    # Solo validar solapamiento si se están modificando horas/día y el horario va a estar ACTIVO
+    # Si solo se desactiva, no necesita validación de solapamiento
+    time_changed = data.start_time is not None or data.end_time is not None or data.weekday is not None
+    will_be_active = data.is_active if data.is_active is not None else schedule.is_active
+
+    if time_changed and will_be_active:
+        # Verificar solapamiento con otros horarios del mismo exhibidor (excluyendo el actual)
+        existing_schedules_query = select(Schedule).where(
+            Schedule.exhibitor_id == schedule.exhibitor_id,
+            Schedule.id != schedule_id,  # Excluir el horario actual
+            Schedule.is_active == True  # Solo verificar con horarios activos
         )
-    
-    existing_schedules_result = await db.execute(existing_schedules_query)
-    existing_schedules = existing_schedules_result.scalars().all()
-    
-    # Verificar solapamiento de horarios
-    for existing in existing_schedules:
-        weekday_overlaps = (
-            existing.weekday is None or
-            new_weekday is None or
-            existing.weekday == new_weekday
-        )
-        
-        if weekday_overlaps:
-            # Verificar solapamiento de tiempos
-            if new_start_time < existing.end_time and new_end_time > existing.start_time:
-                # Mapear números de día a nombres
-                weekday_names = {0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"}
-                existing_weekday_str = "Todos los días" if existing.weekday is None else weekday_names.get(existing.weekday, f"Día {existing.weekday}")
-                new_weekday_str = "Todos los días" if new_weekday is None else weekday_names.get(new_weekday, f"Día {new_weekday}")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"El horario se solapa con uno existente: {existing.start_time.strftime('%H:%M')}-{existing.end_time.strftime('%H:%M')} ({existing_weekday_str}). "
-                           f"El horario actualizado {new_start_time.strftime('%H:%M')}-{new_end_time.strftime('%H:%M')} ({new_weekday_str}) no puede solaparse con horarios existentes."
-                )
+
+        # Si el horario actualizado tiene un weekday específico, solo verificar con horarios del mismo día o null
+        if new_weekday is not None:
+            existing_schedules_query = existing_schedules_query.where(
+                (Schedule.weekday == new_weekday) | (Schedule.weekday.is_(None))
+            )
+
+        existing_schedules_result = await db.execute(existing_schedules_query)
+        existing_schedules = existing_schedules_result.scalars().all()
+
+        # Verificar solapamiento de horarios
+        for existing in existing_schedules:
+            weekday_overlaps = (
+                existing.weekday is None or
+                new_weekday is None or
+                existing.weekday == new_weekday
+            )
+
+            if weekday_overlaps:
+                # Verificar solapamiento de tiempos
+                if new_start_time < existing.end_time and new_end_time > existing.start_time:
+                    # Mapear números de día a nombres
+                    weekday_names = {0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"}
+                    existing_weekday_str = "Todos los días" if existing.weekday is None else weekday_names.get(existing.weekday, f"Día {existing.weekday}")
+                    new_weekday_str = "Todos los días" if new_weekday is None else weekday_names.get(new_weekday, f"Día {new_weekday}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"El horario se solapa con uno existente: {existing.start_time.strftime('%H:%M')}-{existing.end_time.strftime('%H:%M')} ({existing_weekday_str}). "
+                               f"El horario actualizado {new_start_time.strftime('%H:%M')}-{new_end_time.strftime('%H:%M')} ({new_weekday_str}) no puede solaparse con horarios existentes."
+                    )
     
     # Aplicar cambios
     if data.weekday is not None:
@@ -777,7 +979,7 @@ async def update_schedule(
         schedule.is_active = data.is_active
     
     await db.commit()
-    await log_audit(db, admin.user_id, "admin", "schedule_updated", {"schedule_id": str(schedule_id), "is_active": schedule.is_active})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_updated", {"schedule_id": str(schedule_id), "is_active": schedule.is_active})
     
     return {
         "id": str(schedule.id),
@@ -802,7 +1004,7 @@ async def delete_schedule(
     
     await db.execute(delete(Schedule).where(Schedule.id == UUID(schedule_id)))
     await db.commit()
-    await log_audit(db, admin.user_id, "admin", "schedule_deleted", {"schedule_id": str(schedule_id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_deleted", {"schedule_id": str(schedule_id)})
     
     return {"message": "Schedule deleted"}
 
@@ -869,7 +1071,7 @@ async def create_user(
     await db.commit()
     await db.refresh(user)
     
-    await log_audit(db, admin.user_id, "admin", "user_created", {"user_id": str(user.id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "user_created", {"user_id": str(user.id)})
     
     return {
         "id": str(user.id),
@@ -907,7 +1109,7 @@ async def update_user(
         user.is_active = data.is_active
     
     await db.commit()
-    await log_audit(db, admin.user_id, "admin", "user_updated", {"user_id": str(user.id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "user_updated", {"user_id": str(user.id)})
     
     return {
         "id": str(user.id),
@@ -932,7 +1134,7 @@ async def delete_user(
     
     await db.execute(delete(User).where(User.id == UUID(user_id)))
     await db.commit()
-    await log_audit(db, admin.user_id, "admin", "user_deleted", {"user_id": str(user_id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "user_deleted", {"user_id": str(user_id)})
     
     return {"message": "User deleted"}
 
@@ -979,6 +1181,81 @@ async def get_all_hermanos(
         }
         for h in hermanos
     ]
+
+@router.get("/hermanos/available")
+async def get_available_hermanos(
+    exhibitor_id: UUID = Query(None),
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get hermanos available for assignment to an exhibitor (varones only, not yet assigned to other exhibitors)"""
+    # Get all male hermanos
+    result = await db.execute(
+        select(Hermano)
+        .where(Hermano.is_active == True)
+        .order_by(Hermano.nombre)
+    )
+    all_hermanos = result.scalars().all()
+
+    # Get existing leader admin_ids for this exhibitor (to find their hermano_ids)
+    leaders_result = await db.execute(
+        select(ExhibitorLeader.admin_id)
+        .where(ExhibitorLeader.exhibitor_id == exhibitor_id) if exhibitor_id else select(ExhibitorLeader.admin_id).where(False)
+    )
+    existing_leader_admin_ids = {str(lid) for lid, in leaders_result.all()}
+
+    # Get hermano_ids for existing leaders in this exhibitor
+    existing_hermano_ids = set()
+    if existing_leader_admin_ids:
+        hermano_result = await db.execute(
+            select(Admin.hermano_id)
+            .where(Admin.id.in_(list(existing_leader_admin_ids)))
+            .where(Admin.hermano_id.isnot(None))
+        )
+        existing_hermano_ids = {str(hid) for hid, in hermano_result.all()}
+
+    # Get hermanos with leadership in OTHER exhibitors (through Admin)
+    if exhibitor_id:
+        other_leaders_result = await db.execute(
+            select(ExhibitorLeader.admin_id)
+            .where(ExhibitorLeader.exhibitor_id != exhibitor_id)
+        )
+    else:
+        other_leaders_result = await db.execute(
+            select(ExhibitorLeader.admin_id)
+        )
+    other_leader_admin_ids = {str(lid) for lid, in other_leaders_result.all()}
+
+    # Get hermano_ids for leaders in other exhibitors
+    other_leader_hermano_ids = set()
+    if other_leader_admin_ids:
+        other_hermano_result = await db.execute(
+            select(Admin.hermano_id)
+            .where(Admin.id.in_(list(other_leader_admin_ids)))
+            .where(Admin.hermano_id.isnot(None))
+        )
+        other_leader_hermano_ids = {str(hid) for hid, in other_hermano_result.all()}
+
+    # Filter: only varones (detect gender), not already leading other exhibitors
+    available = []
+    for h in all_hermanos:
+        gender = h.genero or detect_gender_from_name(h.nombre)
+
+        # Only include varones (not hermanas)
+        if gender != "hermana":
+            # Check if already leading another exhibitor
+            if str(h.id) not in other_leader_hermano_ids:
+                available.append({
+                    "id": str(h.id),
+                    "nombre": h.nombre,
+                    "congregacion": h.congregacion,
+                    "telefono": h.telefono,
+                    "genero": gender,
+                    "gender_label": get_gender_label(h.nombre) if not h.genero else ("Hermana" if h.genero == "hermana" else "Hermano"),
+                    "is_assigned_here": str(h.id) in existing_hermano_ids
+                })
+
+    return available
 
 @router.post("/hermanos")
 async def create_hermano(
@@ -1088,8 +1365,8 @@ class AdminCreate(BaseModel):
     password: str
     # Roles soportados:
     # - super_admin: administra toda la plataforma
-    # - lider_exhibidor: líder de uno o más puntos de exhibidor
-    role: str = "lider_exhibidor"
+    # - encargado: encargado de uno o más puntos de exhibidor (principal o auxiliar)
+    role: str = "encargado"
 
 class AdminUpdate(BaseModel):
     username: str | None = None
@@ -1234,21 +1511,39 @@ async def create_admin(
     db.add(new_admin)
     await db.commit()
     await db.refresh(new_admin)
-    
+
     actor_id = admin.user_id or admin.hermano_id
     await log_audit(db, actor_id, "admin", "admin_created", {"admin_id": str(new_admin.id)})
-    
-    return {
-        "id": str(new_admin.id),
-        "user_id": str(new_admin.user_id),
-        "username": new_admin.username,
-        "role": new_admin.role,
-        "user": {
-            "id": str(user.id),
-            "full_name": user.full_name,
-            "phone": user.phone
+
+    if data.user_id:
+        return {
+            "id": str(new_admin.id),
+            "user_id": str(new_admin.user_id),
+            "hermano_id": None,
+            "username": new_admin.username,
+            "role": new_admin.role,
+            "user": {
+                "id": str(user.id),
+                "full_name": user.full_name,
+                "phone": user.phone
+            },
+            "hermano": None
         }
-    }
+    else:
+        return {
+            "id": str(new_admin.id),
+            "user_id": None,
+            "hermano_id": str(new_admin.hermano_id),
+            "username": new_admin.username,
+            "role": new_admin.role,
+            "user": None,
+            "hermano": {
+                "id": str(hermano.id),
+                "nombre": hermano.nombre,
+                "congregacion": hermano.congregacion,
+                "telefono": hermano.telefono
+            }
+        }
 
 @router.patch("/admins/{admin_id}")
 async def update_admin(
@@ -1278,23 +1573,32 @@ async def update_admin(
         admin_obj.role = data.role
     
     await db.commit()
-    await log_audit(db, admin.user_id, "admin", "admin_updated", {"admin_id": str(admin_id)})
-    
-    # Get user data
-    user_result = await db.execute(select(User).where(User.id == admin_obj.user_id))
-    user = user_result.scalar_one()
-    
-    return {
-        "id": str(admin_obj.id),
-        "user_id": str(admin_obj.user_id),
-        "username": admin_obj.username,
-        "role": admin_obj.role,
-        "user": {
-            "id": str(user.id),
-            "full_name": user.full_name,
-            "phone": user.phone
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "admin_updated", {"admin_id": str(admin_id)})
+
+    if admin_obj.user_id:
+        user_result = await db.execute(select(User).where(User.id == admin_obj.user_id))
+        user = user_result.scalar_one_or_none()
+        return {
+            "id": str(admin_obj.id),
+            "user_id": str(admin_obj.user_id),
+            "hermano_id": None,
+            "username": admin_obj.username,
+            "role": admin_obj.role,
+            "user": {"id": str(user.id), "full_name": user.full_name, "phone": user.phone} if user else None,
+            "hermano": None
         }
-    }
+    else:
+        hermano_result = await db.execute(select(Hermano).where(Hermano.id == admin_obj.hermano_id))
+        hermano = hermano_result.scalar_one_or_none()
+        return {
+            "id": str(admin_obj.id),
+            "user_id": None,
+            "hermano_id": str(admin_obj.hermano_id),
+            "username": admin_obj.username,
+            "role": admin_obj.role,
+            "user": None,
+            "hermano": {"id": str(hermano.id), "nombre": hermano.nombre, "congregacion": hermano.congregacion, "telefono": hermano.telefono} if hermano else None
+        }
 
 @router.delete("/admins/{admin_id}")
 async def delete_admin(
@@ -1311,34 +1615,9 @@ async def delete_admin(
     
     await db.execute(delete(Admin).where(Admin.id == UUID(admin_id)))
     await db.commit()
-    await log_audit(db, admin.user_id, "admin", "admin_deleted", {"admin_id": str(admin_id)})
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "admin_deleted", {"admin_id": str(admin_id)})
     
     return {"message": "Admin deleted"}
-
-
-# Gestión de horarios (schedules)
-@router.patch("/schedules/{schedule_id}")
-async def update_schedule(
-    schedule_id: str,
-    is_active: bool = None,
-    admin: Admin = Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update schedule status"""
-    result = await db.execute(select(Schedule).where(Schedule.id == UUID(schedule_id)))
-    schedule = result.scalar_one_or_none()
-    
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-    
-    if is_active is not None:
-        schedule.is_active = is_active
-    
-    await db.commit()
-    actor_id = admin.user_id or admin.hermano_id
-    await log_audit(db, actor_id, "admin", "schedule_updated", {"schedule_id": str(schedule_id), "is_active": is_active})
-    
-    return {"message": "Schedule updated", "schedule": {"id": str(schedule.id), "is_active": schedule.is_active}}
 
 
 # Gestión de líderes de exhibidor
@@ -1353,14 +1632,14 @@ class ExhibitorLeaderUpdate(BaseModel):
 
 @router.get("/exhibitor-leaders")
 async def get_exhibitor_leaders(
-    exhibitor_id: str = None,
+    exhibitor_id: UUID = Query(None),
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all exhibitor leaders. Si se proporciona exhibitor_id, solo retorna líderes de ese exhibidor."""
     query = select(ExhibitorLeader, Admin, Exhibitor)
     if exhibitor_id:
-        query = query.where(ExhibitorLeader.exhibitor_id == UUID(exhibitor_id))
+        query = query.where(ExhibitorLeader.exhibitor_id == exhibitor_id)
     
     query = query.join(Admin, ExhibitorLeader.admin_id == Admin.id)
     query = query.join(Exhibitor, ExhibitorLeader.exhibitor_id == Exhibitor.id)
@@ -1410,8 +1689,8 @@ async def create_exhibitor_leader(
     if not admin_obj:
         raise HTTPException(status_code=404, detail="Admin no encontrado")
     
-    if admin_obj.role != "lider_exhibidor":
-        raise HTTPException(status_code=400, detail="El admin debe tener rol 'lider_exhibidor'")
+    if admin_obj.role not in ("encargado", "lider_exhibidor"):
+        raise HTTPException(status_code=400, detail="El admin debe tener rol 'encargado'")
     
     # Verificar que el exhibitor existe
     exhibitor_result = await db.execute(select(Exhibitor).where(Exhibitor.id == UUID(data.exhibitor_id)))
@@ -1420,13 +1699,14 @@ async def create_exhibitor_leader(
         raise HTTPException(status_code=404, detail="Exhibitor no encontrado")
     
     # Validar posición
-    valid_positions = ["principal", "suplente", "encargado_turnos_principal", "encargado_turnos_remplazo", "publicaciones_mantenimiento"]
+    valid_positions = ["principal", "auxiliar", "publicaciones", "mantenimiento", "encargado",
+                       "suplente", "encargado_turnos_principal", "encargado_turnos_remplazo", "publicaciones_mantenimiento"]
     if data.position not in valid_positions:
         raise HTTPException(status_code=400, detail=f"Position debe ser uno de: {', '.join(valid_positions)}")
-    
+
     # Verificar que no haya ya un líder con la misma posición para este exhibidor
-    # Solo las posiciones únicas deben validarse (encargado_turnos_principal es único, los demás pueden repetirse)
-    unique_positions = ["principal", "encargado_turnos_principal"]
+    # Solo las posiciones únicas deben validarse
+    unique_positions = ["principal", "encargado", "encargado_turnos_principal"]
     if data.position in unique_positions:
         existing_leader = await db.execute(
             select(ExhibitorLeader).where(
@@ -1508,9 +1788,9 @@ async def update_exhibitor_leader(
         if not admin_obj:
             raise HTTPException(status_code=404, detail="Admin no encontrado")
         
-        if admin_obj.role != "lider_exhibidor":
-            raise HTTPException(status_code=400, detail="El admin debe tener rol 'lider_exhibidor'")
-        
+        if admin_obj.role not in ("encargado", "lider_exhibidor"):
+            raise HTTPException(status_code=400, detail="El admin debe tener rol 'encargado'")
+
         # Verificar límite de 2 exhibidores para el nuevo admin
         count_result = await db.execute(
             select(func.count(ExhibitorLeader.id)).where(
@@ -1525,7 +1805,8 @@ async def update_exhibitor_leader(
         leader.admin_id = UUID(data.admin_id)
     
     if data.position is not None:
-        valid_positions = ["principal", "suplente", "encargado_turnos_principal", "encargado_turnos_remplazo", "publicaciones_mantenimiento"]
+        valid_positions = ["principal", "auxiliar", "publicaciones", "mantenimiento", "encargado",
+                           "suplente", "encargado_turnos_principal", "encargado_turnos_remplazo", "publicaciones_mantenimiento"]
         if data.position not in valid_positions:
             raise HTTPException(status_code=400, detail=f"Position debe ser uno de: {', '.join(valid_positions)}")
         
@@ -1564,18 +1845,436 @@ async def delete_exhibitor_leader(
 ):
     """Delete exhibitor leader. Solo super_admin puede eliminar."""
     if admin.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Solo super administradores pueden gestionar líderes")
-    
+        raise HTTPException(status_code=403, detail="Solo super administradores pueden gestionar encargados de punto")
+
     result = await db.execute(select(ExhibitorLeader).where(ExhibitorLeader.id == UUID(leader_id)))
     leader = result.scalar_one_or_none()
-    
+
     if not leader:
-        raise HTTPException(status_code=404, detail="Líder no encontrado")
-    
+        raise HTTPException(status_code=404, detail="Encargado no encontrado")
+
     await db.execute(delete(ExhibitorLeader).where(ExhibitorLeader.id == UUID(leader_id)))
     await db.commit()
-    
+
     actor_id = admin.user_id or admin.hermano_id
     await log_audit(db, actor_id, "admin", "exhibitor_leader_deleted", {"leader_id": str(leader_id)})
-    
-    return {"message": "Líder eliminado"}
+
+    return {"message": "Encargado de punto eliminado"}
+
+
+@router.post("/exhibitor-leaders/from-hermano")
+async def assign_hermano_as_leader(
+    data: dict,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Assign a hermano as exhibitor leader. Creates admin record if needed."""
+    if admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super administradores pueden gestionar líderes")
+
+    hermano_id = data.get('hermano_id')
+    exhibitor_id = data.get('exhibitor_id')
+    position = data.get('position', 'principal')
+
+    if not hermano_id or not exhibitor_id:
+        raise HTTPException(status_code=400, detail="Debe proporcionar hermano_id y exhibitor_id")
+
+    # Verify hermano exists
+    hermano_result = await db.execute(select(Hermano).where(Hermano.id == UUID(hermano_id)))
+    hermano = hermano_result.scalar_one_or_none()
+    if not hermano:
+        raise HTTPException(status_code=404, detail="Hermano no encontrado")
+
+    # Verify exhibitor exists
+    exhibitor_result = await db.execute(select(Exhibitor).where(Exhibitor.id == UUID(exhibitor_id)))
+    exhibitor = exhibitor_result.scalar_one_or_none()
+    if not exhibitor:
+        raise HTTPException(status_code=404, detail="Exhibidor no encontrado")
+
+    # Check if admin exists for this hermano
+    admin_result = await db.execute(select(Admin).where(Admin.hermano_id == UUID(hermano_id)))
+    admin_obj = admin_result.scalar_one_or_none()
+
+    if not admin_obj:
+        # Create admin for hermano with generated username and password
+        import secrets
+        import string
+        username = f"encargado_{hermano.nombre[:10].lower().replace(' ', '_')}_{secrets.token_hex(3)}"
+        password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+
+        admin_obj = Admin(
+            hermano_id=UUID(hermano_id),
+            username=username,
+            password_hash=pwd_context.hash(password),
+            role="encargado"
+        )
+        db.add(admin_obj)
+        await db.flush()  # Get the ID without committing
+
+    # Create ExhibitorLeader
+    valid_positions = ["principal", "auxiliar", "publicaciones", "mantenimiento", "encargado",
+                       "suplente", "encargado_turnos_principal", "encargado_turnos_remplazo", "publicaciones_mantenimiento"]
+    if position not in valid_positions:
+        raise HTTPException(status_code=400, detail=f"Position debe ser uno de: {', '.join(valid_positions)}")
+
+    # Check for unique positions
+    unique_positions = ["principal", "encargado", "encargado_turnos_principal"]
+    if position in unique_positions:
+        existing = await db.execute(
+            select(ExhibitorLeader).where(
+                ExhibitorLeader.exhibitor_id == UUID(exhibitor_id),
+                ExhibitorLeader.position == position
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail=f"Ya existe un líder con posición {position} en este exhibidor")
+
+    # Check if hermano already has this position in this exhibitor
+    existing_leader = await db.execute(
+        select(ExhibitorLeader).where(
+            ExhibitorLeader.admin_id == admin_obj.id,
+            ExhibitorLeader.exhibitor_id == UUID(exhibitor_id),
+            ExhibitorLeader.position == position
+        )
+    )
+    if existing_leader.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Este hermano ya tiene esta posición en este exhibidor")
+
+    leader = ExhibitorLeader(
+        admin_id=admin_obj.id,
+        exhibitor_id=UUID(exhibitor_id),
+        position=position
+    )
+    db.add(leader)
+    await db.commit()
+    await db.refresh(leader)
+
+    actor_id = admin.user_id or admin.hermano_id
+    await log_audit(db, actor_id, "admin", "hermano_assigned_as_leader", {
+        "hermano_id": hermano_id,
+        "exhibitor_id": exhibitor_id,
+        "position": position
+    })
+
+    return {
+        "id": str(leader.id),
+        "admin_id": str(leader.admin_id),
+        "hermano_id": hermano_id,
+        "hermano_name": hermano.nombre,
+        "exhibitor_id": str(leader.exhibitor_id),
+        "position": leader.position
+    }
+
+
+# ── AppSettings: configuración global del sistema ───────────────────────────
+from app.models import AppSetting
+
+class AppSettingUpdate(BaseModel):
+    value: dict | list | str | int | float | bool
+
+@router.get("/settings")
+async def get_settings(
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Obtener todas las configuraciones del sistema."""
+    result = await db.execute(select(AppSetting))
+    settings_list = result.scalars().all()
+    return {s.key: s.value for s in settings_list}
+
+@router.put("/settings/{key}")
+async def update_setting(
+    key: str,
+    data: AppSettingUpdate,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Actualizar una configuración del sistema. Solo super_admin."""
+    if admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super administradores pueden modificar configuraciones")
+
+    result = await db.execute(select(AppSetting).where(AppSetting.key == key))
+    setting = result.scalar_one_or_none()
+
+    if setting:
+        setting.value = data.value
+    else:
+        setting = AppSetting(key=key, value=data.value)
+        db.add(setting)
+
+    await db.commit()
+    actor_id = admin.user_id or admin.hermano_id
+    await log_audit(db, actor_id, "admin", "setting_updated", {"key": key, "value": data.value})
+
+    return {"key": key, "value": data.value}
+
+
+# ── Estadísticas mensuales de turnos por hermano ─────────────────────────────
+
+@router.get("/stats/monthly-turns")
+async def get_monthly_turns_stats(
+    exhibitor_id: str = None,
+    year: int = None,
+    month: int = None,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Estadísticas de turnos por hermano en el mes.
+    Incluye indicador visual para quienes superan el límite configurable.
+    Encargados solo ven sus exhibidores asignados.
+    """
+    from datetime import date as date_type
+    import calendar as cal_module
+
+    today = date_type.today()
+    target_year = year or today.year
+    target_month = month or today.month
+
+    first_of_month = date_type(target_year, target_month, 1)
+    last_of_month = date_type(target_year, target_month, cal_module.monthrange(target_year, target_month)[1])
+
+    # Obtener límite configurable desde AppSetting (default 10)
+    setting_result = await db.execute(
+        select(AppSetting).where(AppSetting.key == "monthly_turn_limit")
+    )
+    setting = setting_result.scalar_one_or_none()
+    monthly_limit = int(setting.value) if setting and setting.value else 10
+
+    # Filtrar por exhibidores si es encargado
+    exhibitor_filter = []
+    if admin.role in ("encargado", "lider_exhibidor"):
+        leaders_result = await db.execute(
+            select(ExhibitorLeader.exhibitor_id).where(ExhibitorLeader.admin_id == admin.id)
+        )
+        exhibitor_filter = [row[0] for row in leaders_result.all()]
+        if not exhibitor_filter:
+            return {"stats": [], "monthly_limit": monthly_limit, "period": f"{target_year}-{target_month:02d}"}
+
+    # Query base: contar turnos aprobados por usuario + exhibidor en el mes
+    query = (
+        select(
+            User.id.label("user_id"),
+            User.full_name.label("user_name"),
+            User.phone.label("user_phone"),
+            Exhibitor.id.label("exhibitor_id"),
+            Exhibitor.name.label("exhibitor_name"),
+            func.count(RequestItem.id).label("turn_count")
+        )
+        .join(Request, Request.user_id == User.id)
+        .join(RequestItem, RequestItem.request_id == Request.id)
+        .join(Slot, RequestItem.slot_id == Slot.id)
+        .join(Exhibitor, Slot.exhibitor_id == Exhibitor.id)
+        .where(
+            RequestItem.status == "approved",
+            Slot.slot_date >= first_of_month,
+            Slot.slot_date <= last_of_month
+        )
+        .group_by(User.id, User.full_name, User.phone, Exhibitor.id, Exhibitor.name)
+        .order_by(func.count(RequestItem.id).desc())
+    )
+
+    if exhibitor_id:
+        query = query.where(Exhibitor.id == UUID(exhibitor_id))
+    elif exhibitor_filter:
+        query = query.where(Exhibitor.id.in_(exhibitor_filter))
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    stats = []
+    for row in rows:
+        # Try to get congregation from hermanos table
+        congregacion = None
+        if row.user_phone:
+            phone_clean = re.sub(r'\D', '', row.user_phone)
+            hermano_result = await db.execute(
+                select(Hermano).where(
+                    Hermano.is_active == True,
+                    Hermano.telefono.like(f'%{phone_clean}%')
+                ).limit(1)
+            )
+            hermano = hermano_result.scalar_one_or_none()
+            if hermano:
+                congregacion = hermano.congregacion
+
+        stats.append({
+            "user_id": str(row.user_id),
+            "user_name": row.user_name,
+            "user_phone": row.user_phone,
+            "congregacion": congregacion,
+            "exhibitor_id": str(row.exhibitor_id),
+            "exhibitor_name": row.exhibitor_name,
+            "turn_count": row.turn_count,
+            "exceeds_limit": row.turn_count >= monthly_limit,
+            "near_limit": row.turn_count >= (monthly_limit * 0.8) and row.turn_count < monthly_limit
+        })
+
+    return {
+        "stats": stats,
+        "monthly_limit": monthly_limit,
+        "period": f"{target_year}-{target_month:02d}",
+        "total_users": len(set(r["user_id"] for r in stats)),
+        "users_exceeding_limit": sum(1 for r in stats if r["exceeds_limit"])
+    }
+
+
+# ── Endpoint: consulta de turnos de hermano (módulo usuario desde admin) ─────
+
+@router.get("/hermano-turns")
+async def get_hermano_turns_admin(
+    phone: str,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Consulta los turnos de un hermano por teléfono.
+    Disponible desde el panel de administrador.
+    """
+    import re
+    phone_clean = re.sub(r'\D', '', phone)
+    if not phone_clean or len(phone_clean) < 7:
+        raise HTTPException(status_code=400, detail="Teléfono inválido")
+
+    hermano_result = await db.execute(
+        select(Hermano).where(
+            Hermano.is_active == True,
+            Hermano.telefono.like(f'%{phone_clean}%')
+        ).limit(1)
+    )
+    hermano = hermano_result.scalar_one_or_none()
+
+    user_result = await db.execute(
+        select(User).where(
+            User.is_active == True,
+            User.phone.like(f'%{phone_clean}%')
+        ).limit(1)
+    )
+    user = user_result.scalar_one_or_none()
+
+    if not hermano and not user:
+        raise HTTPException(status_code=404, detail="Hermano no encontrado")
+
+    display_name = hermano.nombre if hermano else (user.full_name if user else "Desconocido")
+    congregacion = hermano.congregacion if hermano else None
+    user_id = user.id if user else None
+
+    if not user_id:
+        return {"found": True, "name": display_name, "congregacion": congregacion, "turns": [], "total": 0}
+
+    items_result = await db.execute(
+        select(RequestItem, Slot, Schedule, Exhibitor)
+        .join(Request, RequestItem.request_id == Request.id)
+        .join(Slot, RequestItem.slot_id == Slot.id)
+        .join(Schedule, Slot.schedule_id == Schedule.id)
+        .join(Exhibitor, Slot.exhibitor_id == Exhibitor.id)
+        .where(
+            Request.user_id == user_id,
+            RequestItem.status == "approved"
+        )
+        .order_by(Slot.slot_date, Schedule.start_time)
+    )
+    items_data = items_result.all()
+
+    turns = []
+    for req_item, slot, schedule, exhibitor in items_data:
+        turns.append({
+            "item_id": str(req_item.id),
+            "exhibitor_name": exhibitor.name,
+            "exhibitor_code": exhibitor.code,
+            "date": slot.slot_date.isoformat(),
+            "start_time": str(schedule.start_time),
+            "end_time": str(schedule.end_time),
+            "status": req_item.status
+        })
+
+    return {
+        "found": True,
+        "name": display_name,
+        "congregacion": congregacion,
+        "turns": turns,
+        "total": len(turns)
+    }
+
+
+@router.get("/dashboard/stats")
+async def get_dashboard_stats(
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get dashboard statistics - unique source of truth for occupancy rates"""
+    from datetime import datetime, date
+    from dateutil.relativedelta import relativedelta
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    month_end = (today + relativedelta(months=1)).replace(day=1) - relativedelta(days=1)
+
+    # Get all slots for this month
+    slots_result = await db.execute(
+        select(Slot)
+        .where(Slot.slot_date >= month_start)
+        .where(Slot.slot_date <= month_end)
+    )
+    all_slots = slots_result.scalars().all()
+    total_slots = len(all_slots)
+
+    # Get all approved RequestItems for this month's slots (optimized single query)
+    approved_items_result = await db.execute(
+        select(RequestItem.slot_id)
+        .distinct()
+        .where(RequestItem.status == "approved")
+    )
+    occupied_slot_ids = set(item[0] for item in approved_items_result.all() if item[0])
+
+    # Count occupied slots (slots with at least one approved RequestItem)
+    occupied_slots = sum(1 for slot in all_slots if slot.id in occupied_slot_ids)
+
+    # Calculate occupancy rate safely (never NaN or Infinity)
+    if total_slots > 0:
+        occupancy_rate = round((occupied_slots / total_slots) * 100, 1)
+    else:
+        occupancy_rate = 0
+
+    # Get all requests for this month
+    requests_result = await db.execute(
+        select(Request)
+        .where(cast(Request.created_at, Date) >= month_start)
+        .where(cast(Request.created_at, Date) <= month_end)
+    )
+    all_requests = requests_result.scalars().all()
+    total_requests = len(all_requests)
+    approved_requests = sum(1 for r in all_requests if r.status == "approved")
+
+    # Get unique users with approved requests
+    approved_items_result = await db.execute(
+        select(Request.user_id)
+        .distinct()
+        .where(cast(Request.created_at, Date) >= month_start)
+        .where(cast(Request.created_at, Date) <= month_end)
+        .where(Request.status == "approved")
+    )
+    approved_items = approved_items_result.all()
+    participating_hermanos = len([item[0] for item in approved_items if item[0]])
+
+    # Get active exhibitors for current month
+    exhibitors_result = await db.execute(
+        select(Exhibitor)
+        .where(Exhibitor.is_active == True)
+        .where(Exhibitor.is_open_for_requests == True)
+        .where(Exhibitor.open_date <= month_end)
+        .where(Exhibitor.close_date >= month_start)
+    )
+    active_exhibitors = len(exhibitors_result.scalars().all())
+
+    # Ensure all values are valid numbers (never NaN, Infinity, null, etc.)
+    return {
+        "occupancy_rate": float(occupancy_rate) if isinstance(occupancy_rate, (int, float)) else 0,
+        "total_requests": int(total_requests),
+        "approved_requests": int(approved_requests),
+        "participating_hermanos": int(participating_hermanos),
+        "active_exhibitors": int(active_exhibitors),
+        "total_slots": int(total_slots),
+        "occupied_slots": int(occupied_slots),
+        "available_slots": int(max(total_slots - occupied_slots, 0))
+    }
