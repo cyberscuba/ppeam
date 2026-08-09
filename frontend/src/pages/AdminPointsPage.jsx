@@ -767,6 +767,10 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       if (!pointData.latitude || pointData.latitude === '') pointData.latitude = null
       if (!pointData.longitude || pointData.longitude === '') pointData.longitude = null
 
+      // Eliminar campos que no son válidos en el backend (solo para adicionales nuevos)
+      delete pointData.basePointName
+      delete pointData.exhibitorNumber
+
       if (initialPoint?.isAdditional && !initialPoint?.id) {
         if (!formData.basePointName || !formData.exhibitorNumber) {
           setNotification({
