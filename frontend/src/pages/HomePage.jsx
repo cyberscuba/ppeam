@@ -94,7 +94,7 @@ export default function HomePage() {
     try {
       // Incluir el teléfono del usuario para filtrar slots ya reservados
       const params = phone ? { phone: phone } : {}
-      const { data } = await client.get('/points', { params })
+      const { data } = await client.get('/api/points', { params })
       setPoints(data)
     } catch (error) {
       logger.error('Error loading points:', error)
