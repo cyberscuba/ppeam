@@ -642,7 +642,9 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
         client.get(`/api/admin/exhibitor-leaders?exhibitor_id=${currentPoint.id}`),
         client.get('/api/admin/admins')
       ])
-      setSchedules(pointData.data.schedules || [])
+      const scheds = pointData.data.schedules || []
+      console.log('📅 Franjas cargadas:', scheds.length, scheds)
+      setSchedules(scheds)
       setLeaders(Array.isArray(leadersData.data) ? leadersData.data : [])
       // Filtrar solo admins con rol lider_exhibidor
       const admins = Array.isArray(adminsData.data) ? adminsData.data : []
