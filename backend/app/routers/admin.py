@@ -1360,7 +1360,7 @@ async def get_all_hermanos(
 
 @router.get("/hermanos/available")
 async def get_available_hermanos(
-    exhibitor_id: UUID = Query(None),
+    exhibitor_id: str = Query(None),
     gender: str = Query(None, description="Filter by gender: 'hermano' or 'hermana'"),
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
@@ -1390,7 +1390,7 @@ async def get_available_hermanos(
                     JOIN exhibitor_leaders el ON a.id = el.admin_id
                     WHERE el.exhibitor_id = :exhibitor_id AND a.hermano_id IS NOT NULL
                 """),
-                {"exhibitor_id": str(exhibitor_id)}
+                {"exhibitor_id": exhibitor_id}
             )
             existing_hermano_ids = {str(hid[0]) for hid in existing_result.fetchall()}
 
@@ -1417,6 +1417,7 @@ async def get_available_hermanos(
                 "is_assigned_here": False
             })
 
+        print(f"✅ get_available_hermanos: exhibitor_id={exhibitor_id}, gender={gender}, found {len(available)} hermanos", file=sys.stderr)
         return available
     except Exception as e:
         import sys
