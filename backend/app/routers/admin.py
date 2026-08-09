@@ -2074,10 +2074,12 @@ async def assign_hermano_as_leader(
             # Create admin for hermano with generated username and password
             import secrets
             import string
+            from uuid import uuid4
             username = f"encargado_{hermano_nombre[:10].lower().replace(' ', '_')}_{secrets.token_hex(3)}"
             password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
             admin_obj = Admin(
+                id=uuid4(),
                 hermano_id=hermano_id_str,
                 username=username,
                 password_hash=pwd_context.hash(password),
