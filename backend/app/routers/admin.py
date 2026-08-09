@@ -1359,40 +1359,42 @@ async def get_available_hermanos(
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all active male hermanos available for assignment"""
-    from sqlalchemy import text
+    """Get all active hermanos (both male and female) available for assignment to an exhibitor"""
+    try:
+        from sqlalchemy import text
 
-    # Get all active hermanos ordered by name
-    result = await db.execute(
-        text("SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = 1 ORDER BY nombre")
-    )
-    all_hermanos_rows = result.fetchall()
-
-    # Get existing hermano_ids already assigned to THIS exhibitor
-    existing_hermano_ids = set()
-    if exhibitor_id:
-        existing_result = await db.execute(
-            text("""
-                SELECT DISTINCT a.hermano_id
-                FROM admins a
-                JOIN exhibitor_leaders el ON a.id = el.admin_id
-                WHERE el.exhibitor_id = :exhibitor_id AND a.hermano_id IS NOT NULL
-            """),
-            {"exhibitor_id": str(exhibitor_id)}
+        # Get all active hermanos ordered by name
+        result = await db.execute(
+            text("SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = 1 ORDER BY nombre")
         )
-        existing_hermano_ids = {str(hid[0]) for hid in existing_result.fetchall()}
+        all_hermanos_rows = result.fetchall()
 
-    # Filter: only varones (male hermanos), showing all regardless of other exhibitor assignments
-    available = []
-    for row in all_hermanos_rows:
-        hermano_id, nombre, congregacion, telefono, genero = row
+        # Get existing hermano_ids already assigned to THIS exhibitor
+        existing_hermano_ids = set()
+        if exhibitor_id:
+            existing_result = await db.execute(
+                text("""
+                    SELECT DISTINCT a.hermano_id
+                    FROM admins a
+                    JOIN exhibitor_leaders el ON a.id = el.admin_id
+                    WHERE el.exhibitor_id = :exhibitor_id AND a.hermano_id IS NOT NULL
+                """),
+                {"exhibitor_id": str(exhibitor_id)}
+            )
+            existing_hermano_ids = {str(hid[0]) for hid in existing_result.fetchall()}
 
-        # Detect gender if not stored
-        actual_gender = genero or detect_gender_from_name(nombre)
-
-        # Only include varones (not hermanas)
-        if actual_gender != "hermana":
+        # Return all available hermanos (no gender filter - let frontend decide)
+        available = []
+        for row in all_hermanos_rows:
+            hermano_id, nombre, congregacion, telefono, genero = row
             is_assigned_here = str(hermano_id) in existing_hermano_ids
+
+            # Skip if already assigned to this exhibitor
+            if is_assigned_here:
+                continue
+
+            # Detect gender for display
+            actual_gender = genero or detect_gender_from_name(nombre)
 
             available.append({
                 "id": str(hermano_id),
@@ -1401,10 +1403,16 @@ async def get_available_hermanos(
                 "telefono": telefono,
                 "genero": actual_gender,
                 "gender_label": get_gender_label(nombre) if not genero else ("Hermana" if genero == "hermana" else "Hermano"),
-                "is_assigned_here": is_assigned_here
+                "is_assigned_here": False
             })
 
-    return available
+        return available
+    except Exception as e:
+        import sys
+        print(f"❌ Error in get_available_hermanos: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error fetching hermanos: {str(e)}")
 
 @router.post("/hermanos")
 async def create_hermano(
