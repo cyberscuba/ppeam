@@ -124,7 +124,17 @@ export default function AdminPointsPage() {
     try {
       let savedPoint
       if (editingPoint) {
-        console.log('📤 Enviando PATCH con datos:', JSON.stringify(pointData, null, 2))
+        console.log('📤 PATCH campos:', {
+          code: pointData.code,
+          name: pointData.name,
+          description: pointData.description,
+          latitude: pointData.latitude,
+          longitude: pointData.longitude,
+          photo_url: pointData.photo_url,
+          is_active: pointData.is_active,
+          basePointName: pointData.basePointName,
+          exhibitorNumber: pointData.exhibitorNumber
+        })
         const { data } = await client.patch(`/api/admin/points/${editingPoint.id}`, pointData)
         savedPoint = { ...editingPoint, ...data }
         setEditingPoint(savedPoint)
