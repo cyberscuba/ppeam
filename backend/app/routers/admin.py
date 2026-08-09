@@ -967,19 +967,35 @@ async def update_schedule(
     db: AsyncSession = Depends(get_db)
 ):
     """Update schedule"""
-    # SQLite almacena UUIDs como VARCHAR, comparar como string directamente
-    result = await db.execute(select(Schedule).where(Schedule.id == schedule_id))
-    schedule = result.scalar_one_or_none()
-    
-    if not schedule:
+    # Use raw SQL to fetch schedule (SQLite async UUID issues)
+    from sqlalchemy import text
+    result = await db.execute(
+        text("SELECT id, exhibitor_id, type, weekday, start_time, end_time, is_active, created_at FROM schedules WHERE id = :schedule_id"),
+        {"schedule_id": schedule_id}
+    )
+    schedule_row = result.fetchone()
+
+    if not schedule_row:
         raise HTTPException(status_code=404, detail="Schedule not found")
+
+    # Convert raw SQL row to dict for easier manipulation
+    schedule = {
+        "id": schedule_row[0],
+        "exhibitor_id": schedule_row[1],
+        "type": schedule_row[2],
+        "weekday": schedule_row[3],
+        "start_time": schedule_row[4],
+        "end_time": schedule_row[5],
+        "is_active": schedule_row[6],
+        "created_at": schedule_row[7]
+    }
     
     # Preparar valores actualizados (usar los nuevos o mantener los existentes)
     from datetime import time as dt_time
-    new_type = data.type if data.type is not None else schedule.type
-    new_weekday = data.weekday if data.weekday is not None else schedule.weekday
-    new_start_time = dt_time.fromisoformat(data.start_time) if data.start_time else schedule.start_time
-    new_end_time = dt_time.fromisoformat(data.end_time) if data.end_time else schedule.end_time
+    new_type = data.type if data.type is not None else schedule["type"]
+    new_weekday = data.weekday if data.weekday is not None else schedule["weekday"]
+    new_start_time = dt_time.fromisoformat(data.start_time) if data.start_time else (schedule["start_time"] if isinstance(schedule["start_time"], dt_time) else dt_time.fromisoformat(str(schedule["start_time"])))
+    new_end_time = dt_time.fromisoformat(data.end_time) if data.end_time else (schedule["end_time"] if isinstance(schedule["end_time"], dt_time) else dt_time.fromisoformat(str(schedule["end_time"])))
 
     # Validar tipo de franja
     valid_types = ['all_days', 'weekends', 'specific_day']
@@ -1042,78 +1058,106 @@ async def update_schedule(
     # Solo validar solapamiento si se están modificando horas/día y el horario va a estar ACTIVO
     # Si solo se desactiva, no necesita validación de solapamiento
     time_changed = data.start_time is not None or data.end_time is not None or data.weekday is not None
-    will_be_active = data.is_active if data.is_active is not None else schedule.is_active
+    will_be_active = data.is_active if data.is_active is not None else schedule["is_active"]
 
     if time_changed and will_be_active:
         # Verificar solapamiento con otros horarios del mismo exhibidor (excluyendo el actual)
-        existing_schedules_query = select(Schedule).where(
-            Schedule.exhibitor_id == schedule.exhibitor_id,
-            Schedule.id != schedule_id,  # Excluir el horario actual
-            Schedule.is_active == True  # Solo verificar con horarios activos
-        )
-
-        # Si el horario actualizado tiene un weekday específico, solo verificar con horarios del mismo día o null
+        # Use raw SQL for SQLite compatibility
+        sql = """
+            SELECT id, type, weekday, start_time, end_time, is_active FROM schedules
+            WHERE exhibitor_id = :exhibitor_id
+            AND id != :schedule_id
+            AND is_active = 1
+        """
         if new_weekday is not None:
-            existing_schedules_query = existing_schedules_query.where(
-                (Schedule.weekday == new_weekday) | (Schedule.weekday.is_(None))
-            )
+            sql += " AND (weekday = :new_weekday OR weekday IS NULL)"
 
-        existing_schedules_result = await db.execute(existing_schedules_query)
-        existing_schedules = existing_schedules_result.scalars().all()
+        params = {
+            "exhibitor_id": schedule["exhibitor_id"],
+            "schedule_id": schedule_id,
+            "new_weekday": new_weekday
+        }
+
+        existing_schedules_result = await db.execute(text(sql), params)
+        existing_schedules_rows = existing_schedules_result.fetchall()
+        existing_schedules = existing_schedules_rows
 
         # Verificar solapamiento de horarios
         for existing in existing_schedules:
+            existing_weekday = existing[2]  # weekday
+            existing_start_time_str = existing[3]  # start_time
+            existing_end_time_str = existing[4]  # end_time
+
+            # Parse time strings from SQLite
+            try:
+                existing_start = dt_time.fromisoformat(str(existing_start_time_str).split('.')[0])
+                existing_end = dt_time.fromisoformat(str(existing_end_time_str).split('.')[0])
+            except (ValueError, AttributeError):
+                continue
+
             weekday_overlaps = (
-                existing.weekday is None or
+                existing_weekday is None or
                 new_weekday is None or
-                existing.weekday == new_weekday
+                existing_weekday == new_weekday
             )
 
             if weekday_overlaps:
                 # Verificar solapamiento de tiempos
-                if new_start_time < existing.end_time and new_end_time > existing.start_time:
+                if new_start_time < existing_end and new_end_time > existing_start:
                     # Mapear números de día a nombres
                     weekday_names = {0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"}
-                    existing_weekday_str = "Todos los días" if existing.weekday is None else weekday_names.get(existing.weekday, f"Día {existing.weekday}")
+                    existing_weekday_str = "Todos los días" if existing_weekday is None else weekday_names.get(existing_weekday, f"Día {existing_weekday}")
                     new_weekday_str = "Todos los días" if new_weekday is None else weekday_names.get(new_weekday, f"Día {new_weekday}")
                     raise HTTPException(
                         status_code=400,
-                        detail=f"El horario se solapa con uno existente: {existing.start_time.strftime('%H:%M')}-{existing.end_time.strftime('%H:%M')} ({existing_weekday_str}). "
+                        detail=f"El horario se solapa con uno existente: {existing_start.strftime('%H:%M')}-{existing_end.strftime('%H:%M')} ({existing_weekday_str}). "
                                f"El horario actualizado {new_start_time.strftime('%H:%M')}-{new_end_time.strftime('%H:%M')} ({new_weekday_str}) no puede solaparse con horarios existentes."
                     )
     
-    # Aplicar cambios
+    # Preparar cambios
+    updates = {}
     if data.type is not None:
-        schedule.type = data.type
+        updates["type"] = data.type
+        schedule["type"] = data.type
 
     if data.weekday is not None:
-        schedule.weekday = data.weekday
+        updates["weekday"] = data.weekday
+        schedule["weekday"] = data.weekday
 
     if data.start_time is not None:
         try:
-            schedule.start_time = dt_time.fromisoformat(data.start_time)
+            updates["start_time"] = data.start_time
+            schedule["start_time"] = data.start_time
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM:SS")
 
     if data.end_time is not None:
         try:
-            schedule.end_time = dt_time.fromisoformat(data.end_time)
+            updates["end_time"] = data.end_time
+            schedule["end_time"] = data.end_time
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM:SS")
 
     if data.is_active is not None:
-        schedule.is_active = data.is_active
+        updates["is_active"] = 1 if data.is_active else 0
+        schedule["is_active"] = data.is_active
 
-    await db.commit()
-    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_updated", {"schedule_id": str(schedule_id), "is_active": schedule.is_active})
+    # Aplicar cambios con raw SQL UPDATE
+    if updates:
+        set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
+        update_sql = f"UPDATE schedules SET {set_clause} WHERE id = :schedule_id"
+        await db.execute(text(update_sql), {**updates, "schedule_id": schedule_id})
+        await db.commit()
+
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_updated", {"schedule_id": str(schedule_id), "is_active": schedule["is_active"]})
 
     return {
-        "id": str(schedule.id),
-        "type": schedule.type,
-        "weekday": schedule.weekday,
-        "start_time": str(schedule.start_time),
-        "end_time": str(schedule.end_time),
-        "is_active": schedule.is_active
+        "id": str(schedule["id"]),
+        "type": schedule["type"],
+        "weekday": schedule["weekday"],
+        "start_time": str(schedule["start_time"]),
+        "end_time": str(schedule["end_time"]),
+        "is_active": schedule["is_active"]
     }
 
 @router.delete("/schedules/{schedule_id}")
