@@ -124,6 +124,7 @@ export default function AdminPointsPage() {
     try {
       let savedPoint
       if (editingPoint) {
+        console.log('📤 Enviando PATCH con datos:', pointData)
         const { data } = await client.patch(`/api/admin/points/${editingPoint.id}`, pointData)
         savedPoint = { ...editingPoint, ...data }
         setEditingPoint(savedPoint)
