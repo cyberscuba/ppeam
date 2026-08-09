@@ -532,6 +532,11 @@ class ScheduleUpdate(BaseModel):
     end_time: str | None = None
     is_active: bool | None = None
 
+class AssignHermanoAsLeader(BaseModel):
+    hermano_id: str
+    exhibitor_id: str
+    position: str = 'principal'
+
 @router.get("/exhibitors")
 async def list_exhibitors(
     admin: Admin = Depends(get_current_admin),
@@ -2027,7 +2032,7 @@ async def delete_exhibitor_leader(
 
 @router.post("/exhibitor-leaders/from-hermano")
 async def assign_hermano_as_leader(
-    data: dict,
+    data: AssignHermanoAsLeader,
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -2035,9 +2040,9 @@ async def assign_hermano_as_leader(
     if admin.role != "super_admin":
         raise HTTPException(status_code=403, detail="Solo super administradores pueden gestionar líderes")
 
-    hermano_id = data.get('hermano_id')
-    exhibitor_id = data.get('exhibitor_id')
-    position = data.get('position', 'principal')
+    hermano_id = data.hermano_id
+    exhibitor_id = data.exhibitor_id
+    position = data.position
 
     if not hermano_id or not exhibitor_id:
         raise HTTPException(status_code=400, detail="Debe proporcionar hermano_id y exhibitor_id")
