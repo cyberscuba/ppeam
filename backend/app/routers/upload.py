@@ -16,9 +16,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Configuración de almacenamiento local (writable directory)
-# Usar /opt/exhibidores/uploads en producción (persistente)
-# O /tmp en desarrollo
-UPLOAD_DIR = Path("/opt/exhibidores/uploads") if Path("/opt/exhibidores").exists() else Path("/tmp/exhibidores_uploads")
+# Debe coincidir con nginx: /opt/exhibidores/backend/uploads
+UPLOAD_DIR = Path("/opt/exhibidores/backend/uploads")
 
 # Configuración de validación
 MAX_FILE_SIZE_MB = 5

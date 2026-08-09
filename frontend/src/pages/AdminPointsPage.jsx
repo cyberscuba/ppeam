@@ -129,7 +129,7 @@ export default function AdminPointsPage() {
         setEditingPoint(savedPoint)
         loadPoints()
       } else {
-        const { data } = await client.post('/api/api/admin/points', pointData)
+        const { data } = await client.post('/api/admin/points', pointData)
         savedPoint = data
         // Actualizar editingPoint para poder agregar horarios sin cerrar el modal
         setEditingPoint(savedPoint)
@@ -621,9 +621,9 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     setLoadingSchedules(true)
     try {
       const [pointData, leadersData, adminsData] = await Promise.all([
-        client.get(`/api/api/admin/points/${currentPoint.id}`),
-        client.get(`/api/api/admin/exhibitor-leaders?exhibitor_id=${currentPoint.id}`),
-        client.get('/api/api/admin/admins')
+        client.get(`/api/admin/points/${currentPoint.id}`),
+        client.get(`/api/admin/exhibitor-leaders?exhibitor_id=${currentPoint.id}`),
+        client.get('/api/admin/admins')
       ])
       setSchedules(pointData.data.schedules || [])
       setLeaders(Array.isArray(leadersData.data) ? leadersData.data : [])
@@ -645,7 +645,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     if (!currentPoint || !currentPoint.id) return
     
     try {
-      const { data } = await client.post('/api/api/admin/exhibitor-leaders', {
+      const { data } = await client.post('/api/admin/exhibitor-leaders', {
         admin_id: adminId,
         exhibitor_id: currentPoint.id,
         position: position
