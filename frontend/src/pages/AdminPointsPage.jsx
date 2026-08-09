@@ -1267,38 +1267,155 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
             </label>
           </div>
 
-          {/* Gestión de Franjas Horarias */}
+          {/* Aviso si el punto no está guardado */}
           {(!initialPoint && !editingPoint) && (
             <div className="border-t pt-6 mt-6">
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                <p className="text-blue-800 text-sm">
-                  💡 <strong>Nota:</strong> Guarde el punto primero para poder agregar franjas horarias.
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4">
+                <p className="text-amber-800 text-sm flex items-center gap-2">
+                  <Clock size={18} className="flex-shrink-0" />
+                  <span><strong>Nota:</strong> Guarde el punto primero para agregar franjas horarias.</span>
                 </p>
               </div>
             </div>
           )}
-          
+
+          {/* Sección Franjas Horarias + Imagen del Exhibidor */}
           {(initialPoint || editingPoint) && (initialPoint?.id || editingPoint?.id) && (
-            <div className="border-t pt-6 mt-6">
-              <h3 className="text-xl font-bold mb-4">Franjas Horarias</h3>
-              
-              {/* Lista de horarios existentes */}
-              {loadingSchedules ? (
-                <div className="text-center py-4">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary-600 border-t-transparent"></div>
+            <div className="border-t pt-6 mt-6 space-y-8">
+              {/* SECCIÓN: FRANJAS HORARIAS */}
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <Clock size={24} className="text-gray-900" />
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Franjas Horarias</h3>
+                    <p className="text-sm text-gray-600">Define los horarios de disponibilidad para cada día.</p>
+                  </div>
                 </div>
-              ) : schedules.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No hay franjas horarias configuradas</p>
-              ) : (
-                <div className="space-y-2 mb-4">
-                  {schedules.map((schedule) => (
-                    <div key={schedule.id} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg">
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                        {/* Día de la semana */}
+
+                {/* Listado de franjas existentes */}
+                {loadingSchedules ? (
+                  <div className="text-center py-8">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary-600 border-t-transparent"></div>
+                  </div>
+                ) : schedules.length === 0 ? (
+                  // Empty state cuando no hay franjas
+                  <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                    <Clock size={32} className="mx-auto mb-2 text-gray-400" />
+                    <p className="text-gray-600 font-medium mb-1">Sin franjas horarias</p>
+                    <p className="text-sm text-gray-500">Crea tu primera franja horaria más abajo</p>
+                  </div>
+                ) : (
+                  // Listado agrupado en bloques profesionales
+                  <div className="space-y-4 mb-6">
+                    {(() => {
+                      // Agrupar franjas por tipo de día
+                      const weekday = schedules.filter(s => s.weekday !== null && s.weekday !== undefined && s.weekday >= 0 && s.weekday <= 4) // Lun-Vie
+                      const weekend = schedules.filter(s => s.weekday === 5 || s.weekday === 6) // Sáb-Dom
+                      const allDays = schedules.filter(s => s.weekday === null || s.weekday === undefined) // Todos
+
+                      const renderScheduleBlocks = (title, scheds, icon, bgColor) => {
+                        if (scheds.length === 0) return null
+
+                        return (
+                          <div key={title} className={`${bgColor} rounded-lg border p-4`}>
+                            <h5 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                              {icon}
+                              {title}
+                            </h5>
+                            <div className="space-y-2">
+                              {scheds.map((schedule) => {
+                                const startTime = schedule.start_time ? schedule.start_time.substring(0, 5) : ''
+                                const endTime = schedule.end_time ? schedule.end_time.substring(0, 5) : ''
+                                const [startH, startM] = startTime.split(':').map(Number)
+                                const [endH, endM] = endTime.split(':').map(Number)
+                                const durationMins = (endH * 60 + endM) - (startH * 60 + startM)
+                                const durationHours = durationMins / 60
+
+                                return (
+                                  <div key={schedule.id} className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded border ${
+                                    schedule.is_active
+                                      ? 'bg-white border-gray-200'
+                                      : 'bg-gray-100 border-gray-200 opacity-70'
+                                  }`}>
+                                    <div className="flex-1">
+                                      <p className={`text-sm font-medium ${schedule.is_active ? 'text-gray-900' : 'text-gray-600'}`}>
+                                        {getWeekdayLabel(schedule.weekday)}
+                                      </p>
+                                      <p className={`text-sm font-mono ${schedule.is_active ? 'text-gray-700' : 'text-gray-500'}`}>
+                                        {startTime} → {endTime} <span className={schedule.is_active ? 'text-gray-600' : 'text-gray-500'}>({durationHours}h)</span>
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <select
+                                        value={schedule.weekday === null || schedule.weekday === undefined ? '' : schedule.weekday}
+                                        onChange={(e) => handleUpdateSchedule(schedule.id, { weekday: e.target.value === '' ? null : parseInt(e.target.value) })}
+                                        className="input text-xs py-1.5 px-2"
+                                        title="Cambiar día"
+                                      >
+                                        {weekdayOptions.map(opt => (
+                                          <option key={opt.value === null ? 'null' : opt.value} value={opt.value === null ? '' : opt.value}>
+                                            {opt.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        onClick={() => handleUpdateSchedule(schedule.id, { is_active: !schedule.is_active })}
+                                        className={`p-1.5 rounded transition-colors ${
+                                          schedule.is_active
+                                            ? 'text-green-600 hover:bg-green-100'
+                                            : 'text-gray-400 hover:bg-gray-200'
+                                        }`}
+                                        title={schedule.is_active ? 'Desactivar' : 'Activar'}
+                                      >
+                                        {schedule.is_active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteScheduleLocal(schedule.id)}
+                                        className="btn bg-red-600 text-white hover:bg-red-700 p-1.5 flex-shrink-0"
+                                        title="Eliminar franja"
+                                      >
+                                        <Trash size={14} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <>
+                          {renderScheduleBlocks('Lunes a Viernes', weekday, '📅', 'bg-blue-50 border-blue-200')}
+                          {renderScheduleBlocks('Sábados y Domingos', weekend, '🎉', 'bg-green-50 border-green-200')}
+                          {renderScheduleBlocks('Todos los días', allDays, '🌍', 'bg-amber-50 border-amber-200')}
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
+
+                {/* Formulario: Nueva franja horaria */}
+                <div className="border-t border-gray-200 pt-6">
+                  <div className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
+                    <h4 className="font-bold text-lg text-gray-900 mb-5 flex items-center gap-2">
+                      <Plus size={20} className="text-blue-600" />
+                      Nueva franja horaria
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-5">Selecciona los días y define el horario de disponibilidad.</p>
+
+                    <div className="space-y-4">
+                      {/* Selector de días */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Días
+                        </label>
                         <select
-                          value={schedule.weekday === null || schedule.weekday === undefined ? '' : schedule.weekday}
-                          onChange={(e) => handleUpdateSchedule(schedule.id, { weekday: e.target.value === '' ? null : parseInt(e.target.value) })}
-                          className="input text-base flex-1 sm:flex-none sm:w-40 py-2.5"
+                          value={newSchedule.weekday === null || newSchedule.weekday === undefined ? '' : newSchedule.weekday}
+                          onChange={(e) => setNewSchedule({ ...newSchedule, weekday: e.target.value === '' ? null : parseInt(e.target.value) })}
+                          className="input w-full py-2.5 text-base"
                         >
                           {weekdayOptions.map(opt => (
                             <option key={opt.value === null ? 'null' : opt.value} value={opt.value === null ? '' : opt.value}>
@@ -1306,227 +1423,201 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                             </option>
                           ))}
                         </select>
-                        {/* Horarios - Solo horas en punto (minutos = 00) */}
-                        <div className="flex items-center gap-2 flex-1">
-                          <input
-                            type="time"
-                            value={schedule.start_time ? schedule.start_time.substring(0, 5) : ''}
-                            onChange={(e) => {
-                              let timeValue = e.target.value
-                              // Ajustar automáticamente los minutos a 00 si el usuario selecciona minutos diferentes
-                              if (timeValue && timeValue.length >= 5) {
-                                const [hours, minutes] = timeValue.split(':')
-                                if (minutes !== '00') {
-                                  timeValue = `${hours}:00`
-                                }
-                              }
-                              handleUpdateSchedule(schedule.id, { start_time: timeValue })
-                            }}
-                            step="3600"
-                            className="input text-base flex-1 py-2.5"
-                            title="Solo se permiten horas en punto (ej: 11:00, 16:00)"
-                          />
-                          <span className="text-gray-600">-</span>
-                          <input
-                            type="time"
-                            value={schedule.end_time ? schedule.end_time.substring(0, 5) : ''}
-                            onChange={(e) => {
-                              let timeValue = e.target.value
-                              // Ajustar automáticamente los minutos a 00 si el usuario selecciona minutos diferentes
-                              if (timeValue && timeValue.length >= 5) {
-                                const [hours, minutes] = timeValue.split(':')
-                                if (minutes !== '00') {
-                                  timeValue = `${hours}:00`
-                                }
-                              }
-                              handleUpdateSchedule(schedule.id, { end_time: timeValue })
-                            }}
-                            step="3600"
-                            className="input text-base flex-1 py-2.5"
-                            title="Solo se permiten horas en punto (ej: 11:00, 16:00)"
-                          />
-                        </div>
-                        {/* Estado y acciones */}
-                        <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={schedule.is_active}
-                              onChange={(e) => handleUpdateSchedule(schedule.id, { is_active: e.target.checked })}
-                              className="w-5 h-5"
-                            />
-                            <span className="text-sm text-gray-600">Activo</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteScheduleLocal(schedule.id)}
-                            className="btn bg-red-600 text-white hover:bg-red-700 p-2.5"
-                            title="Eliminar horario"
-                          >
-                            <Trash size={18} />
-                          </button>
-                        </div>
                       </div>
-                      {/* Mostrar resumen del horario */}
-                      <div className="text-xs text-gray-500 pl-1">
-                        {getWeekdayLabel(schedule.weekday)} • {schedule.start_time ? schedule.start_time.substring(0, 5) : ''} - {schedule.end_time ? schedule.end_time.substring(0, 5) : ''}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
 
-              {/* Agregar nuevo horario - Versión mejorada */}
-              <div className="border-t pt-6 mt-6">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
-                  <h4 className="font-bold text-lg text-blue-900 mb-4 flex items-center gap-2">
-                    <Clock size={24} className="text-blue-600" />
-                    Crear Nueva Franja Horaria
-                  </h4>
-
-                  <div className="space-y-5">
-                    {/* Selector de día */}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        📅 Selecciona los días
-                      </label>
-                      <select
-                        value={newSchedule.weekday === null || newSchedule.weekday === undefined ? '' : newSchedule.weekday}
-                        onChange={(e) => setNewSchedule({ ...newSchedule, weekday: e.target.value === '' ? null : parseInt(e.target.value) })}
-                        className="input w-full py-3 text-base font-medium"
-                      >
-                        {weekdayOptions.map(opt => (
-                          <option key={opt.value === null ? 'null' : opt.value} value={opt.value === null ? '' : opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Selectores de hora mejorados */}
-                    <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-lg border border-blue-100">
-                      {/* Hora de Inicio */}
+                      {/* Inputs de hora - Diseño compacto tipo reloj */}
                       <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">
-                          🕐 Inicio
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Horario
                         </label>
-                        <div className="flex gap-2 items-center">
-                          <select
-                            value={newSchedule.start_time?.split(':')[0] || ''}
-                            onChange={(e) => {
-                              const minutes = newSchedule.start_time?.split(':')[1] || '00'
-                              setNewSchedule({ ...newSchedule, start_time: `${e.target.value}:${minutes}` })
-                            }}
-                            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded font-bold text-lg text-center focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                          >
-                            <option value="">HH</option>
-                            {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
-                              <option key={h} value={String(h).padStart(2, '0')}>
-                                {String(h).padStart(2, '0')}
-                              </option>
-                            ))}
-                          </select>
-                          <span className="text-2xl font-bold text-gray-400">:</span>
-                          <select
-                            value={newSchedule.start_time?.split(':')[1] || '00'}
-                            onChange={(e) => {
-                              const hours = newSchedule.start_time?.split(':')[0] || '06'
-                              setNewSchedule({ ...newSchedule, start_time: `${hours}:${e.target.value}` })
-                            }}
-                            className="px-3 py-2 border-2 border-gray-300 rounded font-bold text-lg text-center focus:border-blue-500 focus:ring-2 focus:ring-blue-200 w-20"
-                          >
-                            <option value="00">00</option>
-                            <option value="30">30</option>
-                          </select>
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* Inicio */}
+                          <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block">Inicio</label>
+                            <div className="flex items-center gap-1 bg-white border-2 border-gray-300 rounded-lg p-2">
+                              <select
+                                value={newSchedule.start_time?.split(':')[0] || ''}
+                                onChange={(e) => {
+                                  const minutes = newSchedule.start_time?.split(':')[1] || '00'
+                                  setNewSchedule({ ...newSchedule, start_time: `${e.target.value}:${minutes}` })
+                                }}
+                                className="flex-1 bg-transparent border-0 text-lg font-bold text-gray-900 focus:ring-0 p-0"
+                              >
+                                <option value="">HH</option>
+                                {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                                  <option key={h} value={String(h).padStart(2, '0')}>
+                                    {String(h).padStart(2, '0')}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="text-xl font-bold text-gray-400">:</span>
+                              <select
+                                value={newSchedule.start_time?.split(':')[1] || '00'}
+                                onChange={(e) => {
+                                  const hours = newSchedule.start_time?.split(':')[0] || '06'
+                                  setNewSchedule({ ...newSchedule, start_time: `${hours}:${e.target.value}` })
+                                }}
+                                className="w-16 bg-transparent border-0 text-lg font-bold text-gray-900 focus:ring-0 p-0"
+                              >
+                                <option value="00">00</option>
+                                <option value="30">30</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Fin */}
+                          <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block">Fin</label>
+                            <div className="flex items-center gap-1 bg-white border-2 border-gray-300 rounded-lg p-2">
+                              <select
+                                value={newSchedule.end_time?.split(':')[0] || ''}
+                                onChange={(e) => {
+                                  const minutes = newSchedule.end_time?.split(':')[1] || '00'
+                                  setNewSchedule({ ...newSchedule, end_time: `${e.target.value}:${minutes}` })
+                                }}
+                                className="flex-1 bg-transparent border-0 text-lg font-bold text-gray-900 focus:ring-0 p-0"
+                              >
+                                <option value="">HH</option>
+                                {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                                  <option key={h} value={String(h).padStart(2, '0')}>
+                                    {String(h).padStart(2, '0')}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="text-xl font-bold text-gray-400">:</span>
+                              <select
+                                value={newSchedule.end_time?.split(':')[1] || '00'}
+                                onChange={(e) => {
+                                  const hours = newSchedule.end_time?.split(':')[0] || '08'
+                                  setNewSchedule({ ...newSchedule, end_time: `${hours}:${e.target.value}` })
+                                }}
+                                className="w-16 bg-transparent border-0 text-lg font-bold text-gray-900 focus:ring-0 p-0"
+                              >
+                                <option value="00">00</option>
+                                <option value="30">30</option>
+                              </select>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Hora de Fin */}
-                      <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">
-                          🕐 Fin
-                        </label>
-                        <div className="flex gap-2 items-center">
-                          <select
-                            value={newSchedule.end_time?.split(':')[0] || ''}
-                            onChange={(e) => {
-                              const minutes = newSchedule.end_time?.split(':')[1] || '00'
-                              setNewSchedule({ ...newSchedule, end_time: `${e.target.value}:${minutes}` })
-                            }}
-                            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded font-bold text-lg text-center focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                          >
-                            <option value="">HH</option>
-                            {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
-                              <option key={h} value={String(h).padStart(2, '0')}>
-                                {String(h).padStart(2, '0')}
-                              </option>
-                            ))}
-                          </select>
-                          <span className="text-2xl font-bold text-gray-400">:</span>
-                          <select
-                            value={newSchedule.end_time?.split(':')[1] || '00'}
-                            onChange={(e) => {
-                              const hours = newSchedule.end_time?.split(':')[0] || '08'
-                              setNewSchedule({ ...newSchedule, end_time: `${hours}:${e.target.value}` })
-                            }}
-                            className="input w-16 py-3 text-base font-semibold text-center"
-                          >
-                            <option value="00">:00</option>
-                            <option value="30">:30</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Información de duración */}
-                    {newSchedule.start_time && newSchedule.end_time && (() => {
-                      const [startH, startM] = newSchedule.start_time.split(':').map(Number)
-                      const [endH, endM] = newSchedule.end_time.split(':').map(Number)
-                      const startMins = startH * 60 + startM
-                      const endMins = endH * 60 + endM
-                      const durationMins = endMins - startMins
-                      const hours = Math.floor(durationMins / 60)
-                      const mins = durationMins % 60
-                      const isValid = durationMins >= 60 && durationMins <= 600
-
-                      return (
-                        <div className={`p-4 rounded-lg font-semibold text-center ${
-                          isValid
-                            ? 'bg-green-50 text-green-800 border border-green-300'
-                            : 'bg-orange-50 text-orange-800 border border-orange-300'
-                        }`}>
-                          ⏱️ Duración: {hours}h {mins > 0 ? `${mins}m` : ''}
-                          {!isValid && <span className="block text-sm mt-1">(Debe ser entre 1 y 10 horas)</span>}
-                        </div>
-                      )
-                    })()}
-
-                    {/* Botón de agregar */}
-                    <button
-                      type="button"
-                      onClick={handleAddSchedule}
-                      disabled={!newSchedule.start_time || !newSchedule.end_time || (() => {
-                        const [startH, startM] = (newSchedule.start_time || '').split(':').map(Number)
-                        const [endH, endM] = (newSchedule.end_time || '').split(':').map(Number)
+                      {/* Validador de duración */}
+                      {newSchedule.start_time && newSchedule.end_time && (() => {
+                        const [startH, startM] = newSchedule.start_time.split(':').map(Number)
+                        const [endH, endM] = newSchedule.end_time.split(':').map(Number)
                         const startMins = startH * 60 + startM
                         const endMins = endH * 60 + endM
                         const durationMins = endMins - startMins
-                        return durationMins < 60 || durationMins > 600
-                      })()}
-                      className="w-full btn btn-primary py-3 text-base font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Plus size={20} />
-                      Crear Franja Horaria
-                    </button>
+                        const hours = Math.floor(durationMins / 60)
+                        const mins = durationMins % 60
+                        const isValid = durationMins >= 60 && durationMins <= 600
 
-                    {/* Pista de uso */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-sm text-blue-900 font-semibold mb-2">💡 Consejos:</p>
-                      <ul className="text-xs text-blue-800 space-y-1">
-                        <li>✓ Solo se permiten minutos :00 y :30</li>
-                        <li>✓ Duración mínima: 1 hora | Duración máxima: 10 horas</li>
-                        <li>✓ Ejemplos: 8:00-10:00 (2h), 8:30-13:00 (4.5h), 14:30-22:00 (7.5h)</li>
-                      </ul>
+                        return (
+                          <div className={`p-3 rounded-lg text-sm font-medium text-center ${
+                            isValid
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-orange-100 text-orange-800'
+                          }`}>
+                            Duración: {hours}h {mins > 0 ? `${mins}m` : ''}
+                            {!isValid && <span className="block text-xs mt-1">Debe ser entre 1 y 10 horas</span>}
+                          </div>
+                        )
+                      })()}
+
+                      {/* Nota de validación */}
+                      <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg">
+                        Intervalos de 30 minutos • Duración entre 1 y 10 horas
+                      </p>
+
+                      {/* Botones de acción */}
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={handleAddSchedule}
+                          disabled={!newSchedule.start_time || !newSchedule.end_time || (() => {
+                            const [startH, startM] = (newSchedule.start_time || '').split(':').map(Number)
+                            const [endH, endM] = (newSchedule.end_time || '').split(':').map(Number)
+                            const startMins = startH * 60 + startM
+                            const endMins = endH * 60 + endM
+                            const durationMins = endMins - startMins
+                            return durationMins < 60 || durationMins > 600
+                          })()}
+                          className="flex-1 btn btn-primary py-2.5 text-base font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Plus size={18} />
+                          Crear franja
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECCIÓN: IMAGEN DEL EXHIBIDOR */}
+              <div className="border-t pt-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <MapPin size={24} className="text-gray-900" />
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Imagen del exhibidor</h3>
+                    <p className="text-sm text-gray-600">Sube una imagen para identificar visualmente el exhibidor.</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border-2 border-gray-200 rounded-lg p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Input de URL */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        URL de la imagen
+                      </label>
+                      <input
+                        type="url"
+                        value={formData.photo_url}
+                        onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
+                        className="input w-full"
+                        placeholder="https://ejemplo.com/foto.jpg o /uploads/archivo.jpg"
+                      />
+                      <p className="text-xs text-gray-500 mt-2">
+                        Puedes usar URLs completas (https://...) o rutas locales (/uploads/...)
+                      </p>
+                    </div>
+
+                    {/* Preview o placeholder */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Vista previa
+                      </label>
+                      <div className="border-2 border-gray-300 rounded-lg bg-gray-50 flex items-center justify-center min-h-48 overflow-hidden">
+                        {formData.photo_url ? (
+                          <img
+                            src={formData.photo_url}
+                            alt="Imagen del exhibidor"
+                            className="w-full h-full object-contain p-2"
+                            onError={(e) => {
+                              // Fallback elegante si la imagen no carga
+                              e.target.style.display = 'none'
+                              e.target.nextSibling.style.display = 'flex'
+                            }}
+                          />
+                        ) : null}
+                        {!formData.photo_url && (
+                          <div className="flex flex-col items-center justify-center p-6 text-center">
+                            <MapPin size={40} className="text-gray-300 mb-2" />
+                            <p className="text-gray-500 text-sm font-medium">Sin imagen</p>
+                            <p className="text-gray-400 text-xs">Ingresa una URL para ver la vista previa</p>
+                          </div>
+                        )}
+                        {formData.photo_url && (
+                          <div
+                            style={{ display: 'none' }}
+                            className="flex flex-col items-center justify-center w-full h-full p-6 text-center bg-gray-100"
+                          >
+                            <MapPin size={40} className="text-gray-300 mb-2" />
+                            <p className="text-gray-500 text-sm font-medium">No se pudo cargar la imagen</p>
+                            <p className="text-gray-400 text-xs">Verifica que la URL sea correcta</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
