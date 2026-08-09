@@ -606,7 +606,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
         })
       }
       if (currentPoint.id) {
-        loadPointDetails()
+        loadPointDetails() // Cargar franjas cuando se abre para editar
       } else {
         setSchedules([])
       }
