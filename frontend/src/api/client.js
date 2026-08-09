@@ -7,9 +7,15 @@ const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'ht
 
 const client = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+})
+
+// Set Content-Type for JSON requests only (not for FormData)
+client.interceptors.request.use((config) => {
+  // Solo establece JSON si el body es JSON, no FormData
+  if (!(config.data instanceof FormData)) {
+    config.headers['Content-Type'] = 'application/json'
+  }
+  return config
 })
 
 // Add auth token to requests
