@@ -125,14 +125,48 @@ async def get_exhibitors(
         else:
             # Si no tiene ambas fechas configuradas, no mostrar
             date_range = []
-        # Get schedules - filter by is_active only if active_only is True
-        # Ordenar por hora de inicio (start_time)
-        schedule_query = select(Schedule).where(Schedule.exhibitor_id == exhibitor.id)
+        # Get schedules using raw SQL to avoid UUID comparison issues
+        from sqlalchemy import text
+        sql_query = "SELECT id, type, weekday, start_time, end_time, is_active FROM schedules WHERE exhibitor_id = :exhibitor_id"
         if active_only:
-            schedule_query = schedule_query.where(Schedule.is_active == True)
-        schedule_query = schedule_query.order_by(Schedule.start_time)
-        schedules_result = await db.execute(schedule_query)
-        schedules = schedules_result.scalars().all()
+            sql_query += " AND is_active = 1"
+        sql_query += " ORDER BY start_time"
+
+        schedules_result = await db.execute(text(sql_query), {"exhibitor_id": str(exhibitor.id)})
+        schedules_rows = schedules_result.fetchall()
+
+        # Convert raw SQL results to objects with the same interface as Schedule ORM objects
+        class ScheduleRow:
+            def __init__(self, id, type, weekday, start_time, end_time, is_active):
+                self.id = id
+                self.type = type
+                self.weekday = weekday
+                try:
+                    self.start_time = start_time if isinstance(start_time, time) else time.fromisoformat(str(start_time).split('.')[0])
+                except (ValueError, AttributeError):
+                    # Fallback: try parsing as full ISO format
+                    try:
+                        self.start_time = time.fromisoformat(str(start_time)[:8])
+                    except:
+                        self.start_time = time(0, 0)
+                try:
+                    self.end_time = end_time if isinstance(end_time, time) else time.fromisoformat(str(end_time).split('.')[0])
+                except (ValueError, AttributeError):
+                    # Fallback: try parsing as full ISO format
+                    try:
+                        self.end_time = time.fromisoformat(str(end_time)[:8])
+                    except:
+                        self.end_time = time(23, 59)
+                self.is_active = is_active
+
+        schedules = []
+        for row in schedules_rows:
+            try:
+                schedules.append(ScheduleRow(row[0], row[1], row[2], row[3], row[4], row[5]))
+            except Exception as e:
+                import sys
+                print(f"❌ Error parsing schedule row: {e}, row: {row}", file=sys.stderr)
+                continue
         
         # Build availability info for each schedule
         schedules_with_availability = []
@@ -247,11 +281,18 @@ async def get_exhibitors(
                     "user_has_slot": user_has_slot  # Indica si el usuario actual ya tiene este slot
                 }
             
-            # Incluir TODOS los schedules (incluso si todos sus slots están llenos)
-            # Esto permite que el frontend calcule correctamente el porcentaje de disponibilidad
-            # IMPORTANTE: Si include_all_schedules es True (admin), incluir todos los schedules
-            # incluso si no tienen disponibilidad (availability vacío)
-            if len(availability) > 0 or include_all_schedules:
+            # IMPORTANTE: Si include_all_schedules=True, SIEMPRE incluir el schedule sin importar availability
+            if include_all_schedules:
+                schedules_with_availability.append({
+                    "id": str(s.id),
+                    "weekday": s.weekday,
+                    "start_time": str(s.start_time),
+                    "end_time": str(s.end_time),
+                    "is_active": s.is_active,
+                    "availability": None
+                })
+            # Incluir schedules con disponibilidad (para usuarios normales)
+            elif len(availability) > 0:
                 schedules_with_availability.append({
                     "id": str(s.id),
                     "weekday": s.weekday,
@@ -280,40 +321,55 @@ async def get_exhibitors(
                     next_year += 1
                 next_open_date = date(next_year, next_month, exhibitor.open_date.day)
         
-        # Obtener líderes del exhibidor con joins optimizados
-        leaders_result = await db.execute(
-            select(ExhibitorLeader, Admin, User, Hermano)
-            .join(Admin, ExhibitorLeader.admin_id == Admin.id)
-            .outerjoin(User, Admin.user_id == User.id)
-            .outerjoin(Hermano, Admin.hermano_id == Hermano.id)
-            .where(ExhibitorLeader.exhibitor_id == exhibitor.id)
-            .order_by(ExhibitorLeader.position)
-        )
-        leaders_data = leaders_result.all()
+        # Obtener líderes del exhibidor con raw SQL para evitar problemas de join
+        try:
+            leaders_sql = """
+                SELECT el.id, el.admin_id, el.position, a.user_id, a.hermano_id, u.full_name, h.nombre
+                FROM exhibitor_leaders el
+                JOIN admins a ON el.admin_id = a.id
+                LEFT JOIN users u ON a.user_id = u.id
+                LEFT JOIN hermanos h ON a.hermano_id = h.id
+                WHERE el.exhibitor_id = :exhibitor_id
+                ORDER BY el.position
+            """
+            leaders_result = await db.execute(text(leaders_sql), {"exhibitor_id": str(exhibitor.id)})
+            leaders_rows = leaders_result.fetchall()
+
+            leaders = []
+            for row in leaders_rows:
+                leader_id, admin_id, position, user_id, hermano_id, full_name, nombre = row
+                admin_name = full_name if full_name else (nombre if nombre else None)
+
+                leaders.append({
+                    "id": str(leader_id),
+                    "admin_id": str(admin_id),
+                    "admin_name": admin_name,
+                    "position": position
+                })
+        except Exception as e:
+            # Si falla la query de líderes, continuar con lista vacía
+            import sys
+            print(f"❌ Error fetching leaders for exhibitor {exhibitor.id}: {e}", file=sys.stderr)
+            leaders = []
         
-        leaders = []
-        for leader, admin_obj, user_obj, hermano_obj in leaders_data:
-            # Obtener nombre del admin (ya está en el join)
-            admin_name = None
-            if user_obj:
-                admin_name = user_obj.full_name
-            elif hermano_obj:
-                admin_name = hermano_obj.nombre
-            
-            leaders.append({
-                "id": str(leader.id),
-                "admin_id": str(leader.admin_id),
-                "admin_name": admin_name,
-                "position": leader.position
-            })
-        
+        # Safe latitude/longitude conversion
+        try:
+            latitude = float(exhibitor.latitude) if exhibitor.latitude else None
+        except (ValueError, TypeError):
+            latitude = None
+
+        try:
+            longitude = float(exhibitor.longitude) if exhibitor.longitude else None
+        except (ValueError, TypeError):
+            longitude = None
+
         response.append({
             "id": str(exhibitor.id),
             "code": exhibitor.code,
             "name": exhibitor.name,
             "description": exhibitor.description,
-            "latitude": float(exhibitor.latitude) if exhibitor.latitude else None,
-            "longitude": float(exhibitor.longitude) if exhibitor.longitude else None,
+            "latitude": latitude,
+            "longitude": longitude,
             "photo_url": exhibitor.photo_url,
             "is_active": exhibitor.is_active,
             "min_persons_per_slot": exhibitor.min_persons_per_slot or 3,
