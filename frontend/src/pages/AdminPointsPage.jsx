@@ -1486,135 +1486,145 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
             </div>
           )}
 
-          {/* Gestión de Encargados */}
+          {/* Hermanos Responsables del Punto */}
           {(initialPoint || editingPoint) && (initialPoint?.id || editingPoint?.id) && (
             <div className="border-t pt-6 mt-6">
-              <h3 className="text-xl font-bold mb-4">Encargados del Exhibidor</h3>
-              
-              {/* Lista de encargados existentes */}
-              {leaders.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No hay encargados asignados</p>
-              ) : (
-                <div className="space-y-2 mb-4">
-                  {leaders.map((leader) => {
-                    const positionLabels = {
-                      'encargado_turnos_principal': 'Encargado Turnos Principal',
-                      'encargado_turnos_remplazo': 'Encargado Turnos Remplazo',
-                      'publicaciones_mantenimiento': 'Publicaciones y Mantenimiento',
-                      'principal': 'Principal',
-                      'suplente': 'Suplente'
-                    }
-                    return (
-                      <div key={leader.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-700">{positionLabels[leader.position] || leader.position}</p>
-                          <p className="text-xs text-gray-600">{leader.admin_name || 'N/A'}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-200">
+                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3 text-purple-900">
+                  👥 Hermanos Responsables
+                  <span className="text-sm font-normal bg-purple-100 text-purple-700 px-3 py-1 rounded-full">
+                    {leaders.length} asignados
+                  </span>
+                </h3>
+
+                {/* Lista de hermanos asignados */}
+                {leaders.length === 0 ? (
+                  <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-purple-200">
+                    <p className="text-gray-500 text-lg font-medium mb-2">Sin hermanos asignados</p>
+                    <p className="text-gray-400 text-sm">Agrega hermanos para responsabilizarlos de este punto</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                    {leaders.map((leader) => {
+                      const positionLabels = {
+                        'encargado_turnos_principal': '🏆 Encargado Principal',
+                        'encargado_turnos_remplazo': '🤝 Encargado Remplazo',
+                        'publicaciones_mantenimiento': '📰 Publicaciones',
+                        'principal': '🏆 Principal',
+                        'suplente': '🤝 Suplente'
+                      }
+                      const positionColors = {
+                        'encargado_turnos_principal': 'from-blue-50 to-blue-100 border-blue-300',
+                        'encargado_turnos_remplazo': 'from-green-50 to-green-100 border-green-300',
+                        'publicaciones_mantenimiento': 'from-orange-50 to-orange-100 border-orange-300',
+                        'principal': 'from-blue-50 to-blue-100 border-blue-300',
+                        'suplente': 'from-green-50 to-green-100 border-green-300'
+                      }
+                      return (
+                        <div key={leader.id} className={`bg-gradient-to-r ${positionColors[leader.position] || 'from-gray-50 to-gray-100 border-gray-300'} rounded-lg p-4 border-2 shadow-sm hover:shadow-md transition-shadow`}>
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <p className="text-sm font-bold text-gray-900">{leader.admin_name || 'N/A'}</p>
+                              <p className="text-xs font-semibold text-gray-700 mt-1">{positionLabels[leader.position] || leader.position}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLeader(leader.id)}
+                              className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-md transition-colors"
+                              title="Remover hermano"
+                            >
+                              <Trash size={14} />
+                            </button>
+                          </div>
                           <select
                             value={leader.position}
                             onChange={(e) => handleUpdateLeader(leader.id, { position: e.target.value })}
-                            className="input text-sm flex-1 sm:flex-none sm:w-48 py-2"
+                            className="input w-full text-xs py-2"
                           >
                             {positionOptions.map(opt => (
                               <option key={opt.value} value={opt.value}>{opt.label}</option>
                             ))}
                           </select>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteLeader(leader.id)}
-                            className="btn bg-red-600 text-white hover:bg-red-700 p-2"
-                            title="Eliminar encargado"
-                          >
-                            <Trash size={16} />
-                          </button>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                      )
+                    })}
+                  </div>
+                )}
 
-              {/* Agregar nuevo encargado */}
-              <div className="border-t pt-4">
-                <h4 className="font-medium mb-3 text-base sm:text-lg">Agregar Nuevo Encargado</h4>
-                
-                {/* Resumen de encargados actuales */}
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-900 font-medium mb-2">Estado actual:</p>
-                  <div className="space-y-1 text-xs text-blue-800">
-                    <div className="flex items-center gap-2">
-                      <span className={leaders.some(l => l.position === 'encargado_turnos_principal') ? 'text-green-600 font-bold' : 'text-gray-400'}>
-                        {leaders.some(l => l.position === 'encargado_turnos_principal') ? '✓' : '○'}
-                      </span>
-                      <span>Encargado Turnos Principal</span>
-                      {leaders.some(l => l.position === 'encargado_turnos_principal') && (
-                        <span className="text-green-700 font-medium">
-                          ({leaders.find(l => l.position === 'encargado_turnos_principal')?.admin_name})
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={leaders.some(l => l.position === 'encargado_turnos_remplazo') ? 'text-green-600 font-bold' : 'text-gray-400'}>
-                        {leaders.some(l => l.position === 'encargado_turnos_remplazo') ? '✓' : '○'}
-                      </span>
-                      <span>Encargado Turnos Remplazo</span>
-                      {leaders.some(l => l.position === 'encargado_turnos_remplazo') && (
-                        <span className="text-green-700 font-medium">
-                          ({leaders.find(l => l.position === 'encargado_turnos_remplazo')?.admin_name})
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={leaders.some(l => l.position === 'publicaciones_mantenimiento') ? 'text-green-600 font-bold' : 'text-gray-400'}>
-                        {leaders.some(l => l.position === 'publicaciones_mantenimiento') ? '✓' : '○'}
-                      </span>
-                      <span>Publicaciones y Mantenimiento</span>
-                      {leaders.some(l => l.position === 'publicaciones_mantenimiento') && (
-                        <span className="text-green-700 font-medium">
-                          ({leaders.find(l => l.position === 'publicaciones_mantenimiento')?.admin_name})
-                        </span>
-                      )}
+                {/* Agregar nuevo hermano responsable */}
+                <div className="border-t-2 border-purple-200 pt-6 mt-6">
+                  <h4 className="font-bold text-lg text-purple-900 mb-4 flex items-center gap-2">
+                    <Plus size={20} />
+                    Asignar Nuevo Hermano
+                  </h4>
+
+                  {/* Resumen de responsabilidades */}
+                  <div className="mb-5 p-4 bg-white rounded-lg border border-purple-200">
+                    <p className="text-sm font-semibold text-gray-800 mb-3">📋 Estado actual de responsabilidades:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {['encargado_turnos_principal', 'encargado_turnos_remplazo', 'publicaciones_mantenimiento'].map(pos => {
+                        const hasLeader = leaders.some(l => l.position === pos)
+                        const label = {
+                          'encargado_turnos_principal': 'Encargado Principal',
+                          'encargado_turnos_remplazo': 'Encargado Remplazo',
+                          'publicaciones_mantenimiento': 'Publicaciones'
+                        }[pos]
+                        const leader = leaders.find(l => l.position === pos)
+                        return (
+                          <div key={pos} className={`p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${
+                            hasLeader
+                              ? 'bg-green-50 text-green-800 border border-green-300'
+                              : 'bg-gray-50 text-gray-600 border border-gray-300'
+                          }`}>
+                            <span className={hasLeader ? 'text-green-600 text-lg' : 'text-gray-400 text-lg'}>
+                              {hasLeader ? '✓' : '○'}
+                            </span>
+                            <span className="flex-1">{label}</span>
+                            {hasLeader && <span className="text-xs font-bold">{leader.admin_name}</span>}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-3">
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <select
-                      value={newLeader.admin_id}
-                      onChange={(e) => setNewLeader({ ...newLeader, admin_id: e.target.value })}
-                      className="input flex-1 py-2.5 text-base"
-                    >
-                      <option value="">Seleccionar administrador...</option>
-                      {admins.map(admin => (
-                        <option key={admin.id} value={admin.id}>
-                          {admin.hermano ? admin.hermano.nombre : admin.user?.full_name} ({admin.username})
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={newLeader.position}
-                      onChange={(e) => setNewLeader({ ...newLeader, position: e.target.value })}
-                      className="input flex-1 sm:flex-none sm:w-64 py-2.5 text-base"
-                    >
-                      {positionOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleAddLeaderWithPosition}
-                      disabled={!newLeader.admin_id}
-                      className="btn btn-primary flex items-center justify-center gap-2 py-2.5 text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Plus size={20} />
-                      Agregar
-                    </button>
+                  {/* Selectores para agregar */}
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <select
+                        value={newLeader.admin_id}
+                        onChange={(e) => setNewLeader({ ...newLeader, admin_id: e.target.value })}
+                        className="input flex-1 py-3 text-base font-medium"
+                      >
+                        <option value="">Seleccionar hermano...</option>
+                        {admins.map(admin => (
+                          <option key={admin.id} value={admin.id}>
+                            {admin.hermano ? admin.hermano.nombre : admin.user?.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={newLeader.position}
+                        onChange={(e) => setNewLeader({ ...newLeader, position: e.target.value })}
+                        className="input flex-1 sm:flex-none sm:w-56 py-3 text-base font-medium"
+                      >
+                        {positionOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handleAddLeaderWithPosition}
+                        disabled={!newLeader.admin_id}
+                        className="btn btn-primary flex items-center justify-center gap-2 py-3 px-6 font-bold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        <Plus size={20} />
+                        Asignar
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg">
+                      💡 <strong>Tip:</strong> Asigna hermanos a diferentes responsabilidades para distribuir mejor el trabajo. Cada hermano puede tener solo una responsabilidad.
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-500">
-                    💡 <strong>Nota:</strong> Solo se muestran administradores con perfil "Líder de Exhibidor"
-                  </p>
                 </div>
               </div>
             </div>
