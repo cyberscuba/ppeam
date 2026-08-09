@@ -2047,31 +2047,33 @@ async def assign_hermano_as_leader(
     if not hermano_id or not exhibitor_id:
         raise HTTPException(status_code=400, detail="Debe proporcionar hermano_id y exhibitor_id")
 
-    # Verify hermano exists
-    hermano_result = await db.execute(select(Hermano).where(Hermano.id == UUID(hermano_id)))
-    hermano = hermano_result.scalar_one_or_none()
-    if not hermano:
+    # Verify hermano exists - use string comparison for SQLite compatibility
+    from sqlalchemy import text as sql_text
+    hermano_result = await db.execute(sql_text("SELECT id, nombre FROM hermanos WHERE id = :id"), {"id": hermano_id})
+    hermano_row = hermano_result.fetchone()
+    if not hermano_row:
         raise HTTPException(status_code=404, detail="Hermano no encontrado")
+    hermano_id_str, hermano_nombre = hermano_row
 
     # Verify exhibitor exists
-    exhibitor_result = await db.execute(select(Exhibitor).where(Exhibitor.id == UUID(exhibitor_id)))
-    exhibitor = exhibitor_result.scalar_one_or_none()
-    if not exhibitor:
+    exhibitor_result = await db.execute(sql_text("SELECT id, name FROM exhibitors WHERE id = :id"), {"id": exhibitor_id})
+    exhibitor_row = exhibitor_result.fetchone()
+    if not exhibitor_row:
         raise HTTPException(status_code=404, detail="Exhibidor no encontrado")
 
     # Check if admin exists for this hermano
-    admin_result = await db.execute(select(Admin).where(Admin.hermano_id == UUID(hermano_id)))
+    admin_result = await db.execute(select(Admin).where(Admin.hermano_id == hermano_id_str))
     admin_obj = admin_result.scalar_one_or_none()
 
     if not admin_obj:
         # Create admin for hermano with generated username and password
         import secrets
         import string
-        username = f"encargado_{hermano.nombre[:10].lower().replace(' ', '_')}_{secrets.token_hex(3)}"
+        username = f"encargado_{hermano_nombre[:10].lower().replace(' ', '_')}_{secrets.token_hex(3)}"
         password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
         admin_obj = Admin(
-            hermano_id=UUID(hermano_id),
+            hermano_id=hermano_id_str,
             username=username,
             password_hash=pwd_context.hash(password),
             role="encargado"
@@ -2090,7 +2092,7 @@ async def assign_hermano_as_leader(
     if position in unique_positions:
         existing = await db.execute(
             select(ExhibitorLeader).where(
-                ExhibitorLeader.exhibitor_id == UUID(exhibitor_id),
+                ExhibitorLeader.exhibitor_id == exhibitor_id,
                 ExhibitorLeader.position == position
             )
         )
@@ -2101,7 +2103,7 @@ async def assign_hermano_as_leader(
     existing_leader = await db.execute(
         select(ExhibitorLeader).where(
             ExhibitorLeader.admin_id == admin_obj.id,
-            ExhibitorLeader.exhibitor_id == UUID(exhibitor_id),
+            ExhibitorLeader.exhibitor_id == exhibitor_id,
             ExhibitorLeader.position == position
         )
     )
