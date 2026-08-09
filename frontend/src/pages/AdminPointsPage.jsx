@@ -1596,7 +1596,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                         className="input flex-1 py-3 text-base font-medium"
                       >
                         <option value="">Seleccionar hermano...</option>
-                        {admins.map(admin => (
+                        {admins.filter(admin => !leaders.some(l => l.admin_id === admin.id)).map(admin => (
                           <option key={admin.id} value={admin.id}>
                             {admin.hermano ? admin.hermano.nombre : admin.user?.full_name}
                           </option>
