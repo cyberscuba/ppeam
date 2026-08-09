@@ -838,10 +838,10 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     const parts = timeStr.split(':')
     if (parts.length < 2) return { valid: false, message: 'Formato de hora inválido' }
     const minutes = parseInt(parts[1], 10)
-    if (minutes !== 0) {
-      return { 
-        valid: false, 
-        message: `Solo se permiten horas en punto (00 minutos). La hora ${timeStr} no es válida. Use ${parts[0]}:00` 
+    if (minutes !== 0 && minutes !== 30) {
+      return {
+        valid: false,
+        message: `Solo se permiten intervalos de 30 minutos (:00 o :30). La hora ${timeStr} no es válida. Use ${parts[0]}:00 o ${parts[0]}:30`
       }
     }
     return { valid: true }
