@@ -20,7 +20,7 @@ export default function AdminLoginPage() {
     setLoading(true)
 
     try {
-      const { data } = await client.post('/auth/admin/login', {
+      const { data } = await client.post('/api/auth/admin/login', {
         username,
         password
       })
