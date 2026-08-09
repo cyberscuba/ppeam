@@ -862,10 +862,12 @@ async def create_schedule(
     db: AsyncSession = Depends(get_db)
 ):
     """Create new schedule for an exhibitor (punto de exhibidor)"""
-    # Verify exhibitor exists
-    exhibitor_result = await db.execute(select(Exhibitor).where(Exhibitor.id == UUID(point_id)))
-    exhibitor = exhibitor_result.scalar_one_or_none()
-    if not exhibitor:
+    from sqlalchemy import text
+
+    # Verify exhibitor exists using raw SQL (SQLite async compatibility)
+    exhibitor_result = await db.execute(text(f"SELECT id FROM exhibitors WHERE id = '{point_id}'"))
+    exhibitor_row = exhibitor_result.fetchone()
+    if not exhibitor_row:
         raise HTTPException(status_code=404, detail="Exhibitor not found")
     
     from datetime import time as dt_time
