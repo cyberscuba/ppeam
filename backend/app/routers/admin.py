@@ -2037,103 +2037,110 @@ async def assign_hermano_as_leader(
     db: AsyncSession = Depends(get_db)
 ):
     """Assign a hermano as exhibitor leader. Creates admin record if needed."""
-    if admin.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Solo super administradores pueden gestionar líderes")
+    try:
+        if admin.role != "super_admin":
+            raise HTTPException(status_code=403, detail="Solo super administradores pueden gestionar líderes")
 
-    hermano_id = data.hermano_id
-    exhibitor_id = data.exhibitor_id
-    position = data.position
+        hermano_id = data.hermano_id
+        exhibitor_id = data.exhibitor_id
+        position = data.position
 
-    if not hermano_id or not exhibitor_id:
-        raise HTTPException(status_code=400, detail="Debe proporcionar hermano_id y exhibitor_id")
+        if not hermano_id or not exhibitor_id:
+            raise HTTPException(status_code=400, detail="Debe proporcionar hermano_id y exhibitor_id")
 
-    # Verify hermano exists - use string comparison for SQLite compatibility
-    from sqlalchemy import text as sql_text
-    hermano_result = await db.execute(sql_text("SELECT id, nombre FROM hermanos WHERE id = :id"), {"id": hermano_id})
-    hermano_row = hermano_result.fetchone()
-    if not hermano_row:
-        raise HTTPException(status_code=404, detail="Hermano no encontrado")
-    hermano_id_str, hermano_nombre = hermano_row
+        # Verify hermano exists - use string comparison for SQLite compatibility
+        from sqlalchemy import text as sql_text
+        hermano_result = await db.execute(sql_text("SELECT id, nombre FROM hermanos WHERE id = :id"), {"id": hermano_id})
+        hermano_row = hermano_result.fetchone()
+        if not hermano_row:
+            raise HTTPException(status_code=404, detail="Hermano no encontrado")
+        hermano_id_str, hermano_nombre = hermano_row
 
-    # Verify exhibitor exists
-    exhibitor_result = await db.execute(sql_text("SELECT id, name FROM exhibitors WHERE id = :id"), {"id": exhibitor_id})
-    exhibitor_row = exhibitor_result.fetchone()
-    if not exhibitor_row:
-        raise HTTPException(status_code=404, detail="Exhibidor no encontrado")
+        # Verify exhibitor exists
+        exhibitor_result = await db.execute(sql_text("SELECT id, name FROM exhibitors WHERE id = :id"), {"id": exhibitor_id})
+        exhibitor_row = exhibitor_result.fetchone()
+        if not exhibitor_row:
+            raise HTTPException(status_code=404, detail="Exhibidor no encontrado")
 
-    # Check if admin exists for this hermano
-    admin_result = await db.execute(select(Admin).where(Admin.hermano_id == hermano_id_str))
-    admin_obj = admin_result.scalar_one_or_none()
+        # Check if admin exists for this hermano - use raw SQL for compatibility
+        admin_check = await db.execute(sql_text("SELECT id FROM admins WHERE hermano_id = :hermano_id"), {"hermano_id": hermano_id_str})
+        admin_row = admin_check.fetchone()
+        admin_obj = None
+        if admin_row:
+            admin_obj_result = await db.execute(select(Admin).where(Admin.id == admin_row[0]))
+            admin_obj = admin_obj_result.scalar_one_or_none()
 
-    if not admin_obj:
-        # Create admin for hermano with generated username and password
-        import secrets
-        import string
-        username = f"encargado_{hermano_nombre[:10].lower().replace(' ', '_')}_{secrets.token_hex(3)}"
-        password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+        if not admin_obj:
+            # Create admin for hermano with generated username and password
+            import secrets
+            import string
+            username = f"encargado_{hermano_nombre[:10].lower().replace(' ', '_')}_{secrets.token_hex(3)}"
+            password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
-        admin_obj = Admin(
-            hermano_id=hermano_id_str,
-            username=username,
-            password_hash=pwd_context.hash(password),
-            role="encargado"
-        )
-        db.add(admin_obj)
-        await db.flush()  # Get the ID without committing
-
-    # Create ExhibitorLeader
-    valid_positions = ["principal", "auxiliar", "publicaciones", "mantenimiento", "encargado",
-                       "suplente", "encargado_turnos_principal", "encargado_turnos_remplazo", "publicaciones_mantenimiento"]
-    if position not in valid_positions:
-        raise HTTPException(status_code=400, detail=f"Position debe ser uno de: {', '.join(valid_positions)}")
-
-    # Check for unique positions
-    unique_positions = ["principal", "encargado", "encargado_turnos_principal"]
-    if position in unique_positions:
-        existing = await db.execute(
-            select(ExhibitorLeader).where(
-                ExhibitorLeader.exhibitor_id == exhibitor_id,
-                ExhibitorLeader.position == position
+            admin_obj = Admin(
+                hermano_id=hermano_id_str,
+                username=username,
+                password_hash=pwd_context.hash(password),
+                role="encargado"
             )
+            db.add(admin_obj)
+            await db.flush()
+
+        # Create ExhibitorLeader
+        valid_positions = ["principal", "auxiliar", "publicaciones", "mantenimiento", "encargado",
+                           "suplente", "encargado_turnos_principal", "encargado_turnos_remplazo", "publicaciones_mantenimiento"]
+        if position not in valid_positions:
+            raise HTTPException(status_code=400, detail=f"Position debe ser uno de: {', '.join(valid_positions)}")
+
+        # Check for unique positions - use raw SQL
+        unique_positions = ["principal", "encargado", "encargado_turnos_principal"]
+        if position in unique_positions:
+            existing_check = await db.execute(
+                sql_text("SELECT id FROM exhibitor_leaders WHERE exhibitor_id = :exhibitor_id AND position = :position"),
+                {"exhibitor_id": exhibitor_id, "position": position}
+            )
+            if existing_check.fetchone():
+                raise HTTPException(status_code=400, detail=f"Ya existe un líder con posición {position} en este exhibidor")
+
+        # Check if hermano already has this position in this exhibitor - use raw SQL
+        existing_check = await db.execute(
+            sql_text("SELECT id FROM exhibitor_leaders WHERE admin_id = :admin_id AND exhibitor_id = :exhibitor_id AND position = :position"),
+            {"admin_id": admin_obj.id, "exhibitor_id": exhibitor_id, "position": position}
         )
-        if existing.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail=f"Ya existe un líder con posición {position} en este exhibidor")
+        if existing_check.fetchone():
+            raise HTTPException(status_code=400, detail="Este hermano ya tiene esta posición en este exhibidor")
 
-    # Check if hermano already has this position in this exhibitor
-    existing_leader = await db.execute(
-        select(ExhibitorLeader).where(
-            ExhibitorLeader.admin_id == admin_obj.id,
-            ExhibitorLeader.exhibitor_id == exhibitor_id,
-            ExhibitorLeader.position == position
+        leader = ExhibitorLeader(
+            admin_id=admin_obj.id,
+            exhibitor_id=exhibitor_id,
+            position=position
         )
-    )
-    if existing_leader.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Este hermano ya tiene esta posición en este exhibidor")
+        db.add(leader)
+        await db.commit()
+        await db.refresh(leader)
 
-    leader = ExhibitorLeader(
-        admin_id=admin_obj.id,
-        exhibitor_id=UUID(exhibitor_id),
-        position=position
-    )
-    db.add(leader)
-    await db.commit()
-    await db.refresh(leader)
+        actor_id = admin.user_id or admin.hermano_id
+        await log_audit(db, actor_id, "admin", "hermano_assigned_as_leader", {
+            "hermano_id": hermano_id,
+            "exhibitor_id": exhibitor_id,
+            "position": position
+        })
 
-    actor_id = admin.user_id or admin.hermano_id
-    await log_audit(db, actor_id, "admin", "hermano_assigned_as_leader", {
-        "hermano_id": hermano_id,
-        "exhibitor_id": exhibitor_id,
-        "position": position
-    })
-
-    return {
-        "id": str(leader.id),
-        "admin_id": str(leader.admin_id),
-        "hermano_id": hermano_id,
-        "hermano_name": hermano.nombre,
-        "exhibitor_id": str(leader.exhibitor_id),
-        "position": leader.position
-    }
+        return {
+            "id": str(leader.id),
+            "admin_id": str(leader.admin_id),
+            "hermano_id": hermano_id,
+            "hermano_name": hermano_nombre,
+            "exhibitor_id": str(leader.exhibitor_id),
+            "position": leader.position
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_detail = f"Error al asignar hermano: {str(e)}"
+        print(f"[ERROR] {error_detail}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 # ── AppSettings: configuración global del sistema ───────────────────────────
