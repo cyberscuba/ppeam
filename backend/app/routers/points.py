@@ -16,6 +16,7 @@ router = APIRouter()
 
 class ScheduleResponse(BaseModel):
     id: str
+    type: str | None = None  # all_days, weekends, specific_day
     weekday: int | None = None
     start_time: str
     end_time: str
@@ -185,10 +186,17 @@ async def get_exhibitors(
                         continue
                 
                 # Find or estimate slot for this date
+                # Convert s.id to UUID since it comes from raw SQL as string
+                from uuid import UUID
+                try:
+                    schedule_id_uuid = UUID(s.id) if isinstance(s.id, str) else s.id
+                except (ValueError, AttributeError):
+                    schedule_id_uuid = s.id
+
                 slot_result = await db.execute(
                     select(Slot).where(
                         Slot.exhibitor_id == exhibitor.id,
-                        Slot.schedule_id == s.id,
+                        Slot.schedule_id == schedule_id_uuid,
                         Slot.slot_date == check_date
                     )
                 )
@@ -285,6 +293,7 @@ async def get_exhibitors(
             if include_all_schedules:
                 schedules_with_availability.append({
                     "id": str(s.id),
+                    "type": s.type,
                     "weekday": s.weekday,
                     "start_time": str(s.start_time),
                     "end_time": str(s.end_time),
@@ -295,6 +304,7 @@ async def get_exhibitors(
             elif len(availability) > 0:
                 schedules_with_availability.append({
                     "id": str(s.id),
+                    "type": s.type,
                     "weekday": s.weekday,
                     "start_time": str(s.start_time),
                     "end_time": str(s.end_time),
