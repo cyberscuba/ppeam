@@ -34,7 +34,7 @@ export default function AdminPointsPage() {
   const loadPoints = async () => {
     try {
       // Incluir todos los schedules incluso si el exhibidor está cerrado (para admin)
-      const response = await client.get('/points?active_only=false&include_all_schedules=true')
+      const response = await client.get('/api/points?active_only=false&include_all_schedules=true')
       const data = response?.data
 
       if (!Array.isArray(data)) {
@@ -78,7 +78,7 @@ export default function AdminPointsPage() {
 
   const togglePointStatus = async (pointId, currentStatus) => {
     try {
-      await client.patch(`/admin/points/${pointId}`, {
+      await client.patch(`/api/admin/points/${pointId}`, {
         is_active: !currentStatus
       })
       setNotification({
@@ -100,7 +100,7 @@ export default function AdminPointsPage() {
 
   const toggleScheduleStatus = async (scheduleId, currentStatus) => {
     try {
-      await client.patch(`/admin/schedules/${scheduleId}`, {
+      await client.patch(`/api/admin/schedules/${scheduleId}`, {
         is_active: !currentStatus
       })
       setNotification({
@@ -124,12 +124,12 @@ export default function AdminPointsPage() {
     try {
       let savedPoint
       if (editingPoint) {
-        const { data } = await client.patch(`/admin/points/${editingPoint.id}`, pointData)
+        const { data } = await client.patch(`/api/admin/points/${editingPoint.id}`, pointData)
         savedPoint = { ...editingPoint, ...data }
         setEditingPoint(savedPoint)
         loadPoints()
       } else {
-        const { data } = await client.post('/admin/points', pointData)
+        const { data } = await client.post('/api/api/admin/points', pointData)
         savedPoint = data
         // Actualizar editingPoint para poder agregar horarios sin cerrar el modal
         setEditingPoint(savedPoint)
@@ -163,7 +163,7 @@ export default function AdminPointsPage() {
       onConfirm: async () => {
         setConfirmationModal(null)
         try {
-          await client.delete(`/admin/points/${pointId}`)
+          await client.delete(`/api/admin/points/${pointId}`)
           setNotification({
             type: 'success',
             title: 'Punto Eliminado',
@@ -194,7 +194,7 @@ export default function AdminPointsPage() {
       onConfirm: async () => {
         setConfirmationModal(null)
         try {
-          await client.delete(`/admin/schedules/${scheduleId}`)
+          await client.delete(`/api/admin/schedules/${scheduleId}`)
           setNotification({
             type: 'success',
             title: 'Franja Horaria Eliminada',
@@ -617,16 +617,20 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     setLoadingSchedules(true)
     try {
       const [pointData, leadersData, adminsData] = await Promise.all([
-        client.get(`/admin/points/${currentPoint.id}`),
-        client.get(`/admin/exhibitor-leaders?exhibitor_id=${currentPoint.id}`),
-        client.get('/admin/admins')
+        client.get(`/api/api/admin/points/${currentPoint.id}`),
+        client.get(`/api/api/admin/exhibitor-leaders?exhibitor_id=${currentPoint.id}`),
+        client.get('/api/api/admin/admins')
       ])
       setSchedules(pointData.data.schedules || [])
-      setLeaders(leadersData.data || [])
+      setLeaders(Array.isArray(leadersData.data) ? leadersData.data : [])
       // Filtrar solo admins con rol lider_exhibidor
-      setAdmins(adminsData.data.filter(a => a.role === 'lider_exhibidor') || [])
+      const admins = Array.isArray(adminsData.data) ? adminsData.data : []
+      setAdmins(admins.filter(a => a.role === 'lider_exhibidor') || [])
     } catch (error) {
       console.error('Error loading point details:', error)
+      setSchedules([])
+      setLeaders([])
+      setAdmins([])
     } finally {
       setLoadingSchedules(false)
     }
@@ -637,7 +641,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
     if (!currentPoint || !currentPoint.id) return
     
     try {
-      const { data } = await client.post('/admin/exhibitor-leaders', {
+      const { data } = await client.post('/api/api/admin/exhibitor-leaders', {
         admin_id: adminId,
         exhibitor_id: currentPoint.id,
         position: position
@@ -682,7 +686,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
   
   const handleUpdateLeader = async (leaderId, updates) => {
     try {
-      const { data } = await client.patch(`/admin/exhibitor-leaders/${leaderId}`, updates)
+      const { data } = await client.patch(`/api/admin/exhibitor-leaders/${leaderId}`, updates)
       setLeaders(leaders.map(l => l.id === leaderId ? data : l))
       loadPointDetails() // Recargar para obtener nombres
       setNotification({
@@ -711,7 +715,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       onConfirm: async () => {
         setConfirmationModal(null)
         try {
-          await client.delete(`/admin/exhibitor-leaders/${leaderId}`)
+          await client.delete(`/api/admin/exhibitor-leaders/${leaderId}`)
           setLeaders(leaders.filter(l => l.id !== leaderId))
           setNotification({
             type: 'success',
@@ -773,7 +777,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
   const loadPointDetailsForNewPoint = async (pointId) => {
     setLoadingSchedules(true)
     try {
-      const { data } = await client.get(`/admin/points/${pointId}`)
+      const { data } = await client.get(`/api/admin/points/${pointId}`)
       setSchedules(data.schedules || [])
     } catch (error) {
       console.error('Error loading point details:', error)
@@ -861,7 +865,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       // Convert weekday: if it's null/undefined, send null; otherwise send the number (including 0 for Monday)
       const weekdayValue = (newSchedule.weekday === null || newSchedule.weekday === undefined) ? null : newSchedule.weekday
       
-      const { data } = await client.post(`/admin/points/${currentPoint.id}/schedules`, {
+      const { data } = await client.post(`/api/admin/points/${currentPoint.id}/schedules`, {
         weekday: weekdayValue,
         start_time: startTime,
         end_time: endTime,
@@ -948,7 +952,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
         formattedUpdates.weekday = (updates.weekday === null || updates.weekday === undefined) ? null : updates.weekday
       }
       
-      const { data } = await client.patch(`/admin/schedules/${scheduleId}`, formattedUpdates)
+      const { data } = await client.patch(`/api/admin/schedules/${scheduleId}`, formattedUpdates)
       setSchedules(schedules.map(s => s.id === scheduleId ? data : s))
       setNotification({
         type: 'success',
@@ -1119,17 +1123,39 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
             </p>
           </div>
 
-          <div>
-            <label className="block text-gray-700 font-medium mb-2">
-              URL de Foto
+          <div className="border-2 border-gray-200 rounded-lg p-4 bg-gray-50">
+            <label className="block text-gray-700 font-semibold mb-3">
+              📸 Foto del Exhibidor
             </label>
-            <input
-              type="url"
-              value={formData.photo_url}
-              onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
-              className="input"
-              placeholder="https://ejemplo.com/foto.jpg"
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <input
+                  type="url"
+                  value={formData.photo_url}
+                  onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
+                  className="input w-full"
+                  placeholder="https://ejemplo.com/foto.jpg"
+                />
+                <p className="text-xs text-gray-600 mt-2">Ingrese la URL completa de la foto (comienza con https://)</p>
+              </div>
+              {formData.photo_url && (
+                <div className="border-2 border-gray-300 rounded-lg overflow-hidden bg-white flex items-center justify-center p-2">
+                  <img
+                    src={formData.photo_url}
+                    alt="Preview"
+                    className="max-h-32 object-cover rounded"
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                      e.target.nextSibling.style.display = 'flex'
+                    }}
+                  />
+                  <div style={{display: 'none'}} className="text-center text-gray-500 text-sm w-full">
+                    <p>❌ No se pudo cargar la imagen</p>
+                    <p className="text-xs">Verifica que la URL sea correcta</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Capacidad de Personas por Turno */}
@@ -1380,64 +1406,66 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                       </select>
                     </div>
 
-                    {/* Selectores de hora con dropdown */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Selectores de hora mejorados */}
+                    <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-lg border border-blue-100">
                       {/* Hora de Inicio */}
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          ⏰ Hora Inicio
+                        <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">
+                          🕐 Inicio
                         </label>
-                        <div className="flex gap-1">
+                        <div className="flex gap-2 items-center">
                           <select
                             value={newSchedule.start_time?.split(':')[0] || ''}
                             onChange={(e) => {
                               const minutes = newSchedule.start_time?.split(':')[1] || '00'
                               setNewSchedule({ ...newSchedule, start_time: `${e.target.value}:${minutes}` })
                             }}
-                            className="input flex-1 py-3 text-base font-semibold text-center"
+                            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded font-bold text-lg text-center focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                           >
-                            <option value="">Hora</option>
+                            <option value="">HH</option>
                             {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
                               <option key={h} value={String(h).padStart(2, '0')}>
-                                {String(h).padStart(2, '0')}:00
+                                {String(h).padStart(2, '0')}
                               </option>
                             ))}
                           </select>
+                          <span className="text-2xl font-bold text-gray-400">:</span>
                           <select
                             value={newSchedule.start_time?.split(':')[1] || '00'}
                             onChange={(e) => {
                               const hours = newSchedule.start_time?.split(':')[0] || '06'
                               setNewSchedule({ ...newSchedule, start_time: `${hours}:${e.target.value}` })
                             }}
-                            className="input w-16 py-3 text-base font-semibold text-center"
+                            className="px-3 py-2 border-2 border-gray-300 rounded font-bold text-lg text-center focus:border-blue-500 focus:ring-2 focus:ring-blue-200 w-20"
                           >
-                            <option value="00">:00</option>
-                            <option value="30">:30</option>
+                            <option value="00">00</option>
+                            <option value="30">30</option>
                           </select>
                         </div>
                       </div>
 
                       {/* Hora de Fin */}
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          ⏰ Hora Fin
+                        <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">
+                          🕐 Fin
                         </label>
-                        <div className="flex gap-1">
+                        <div className="flex gap-2 items-center">
                           <select
                             value={newSchedule.end_time?.split(':')[0] || ''}
                             onChange={(e) => {
                               const minutes = newSchedule.end_time?.split(':')[1] || '00'
                               setNewSchedule({ ...newSchedule, end_time: `${e.target.value}:${minutes}` })
                             }}
-                            className="input flex-1 py-3 text-base font-semibold text-center"
+                            className="flex-1 px-3 py-2 border-2 border-gray-300 rounded font-bold text-lg text-center focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                           >
-                            <option value="">Hora</option>
+                            <option value="">HH</option>
                             {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
                               <option key={h} value={String(h).padStart(2, '0')}>
-                                {String(h).padStart(2, '0')}:00
+                                {String(h).padStart(2, '0')}
                               </option>
                             ))}
                           </select>
+                          <span className="text-2xl font-bold text-gray-400">:</span>
                           <select
                             value={newSchedule.end_time?.split(':')[1] || '00'}
                             onChange={(e) => {
