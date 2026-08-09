@@ -935,69 +935,28 @@ async def create_schedule(
                 detail="Para tipo 'all_days', weekday debe ser NULL (no se especifica día)"
             )
     
-    # Verificar solapamiento con horarios existentes del mismo exhibidor
-    # Obtener todos los horarios del exhibidor que podrían solaparse
-    existing_schedules_query = select(Schedule).where(
-        Schedule.exhibitor_id == UUID(point_id),
-        Schedule.is_active == True  # Solo verificar con horarios activos
-    )
-    
-    # Si el nuevo horario tiene un weekday específico, solo verificar con horarios del mismo día o null
-    # Si el nuevo horario tiene weekday null, verificar con todos los horarios
-    if data.weekday is not None:
-        existing_schedules_query = existing_schedules_query.where(
-            (Schedule.weekday == data.weekday) | (Schedule.weekday.is_(None))
-        )
-    
-    existing_schedules_result = await db.execute(existing_schedules_query)
-    existing_schedules = existing_schedules_result.scalars().all()
-    
-    # Verificar solapamiento de horarios
-    for existing in existing_schedules:
-        # Si el horario existente tiene weekday null, se aplica a todos los días, incluyendo el del nuevo
-        # Si el nuevo tiene weekday null, se aplica a todos los días, incluyendo el del existente
-        # Si ambos tienen el mismo weekday, se solapan
-        # Si uno tiene weekday y el otro null, se solapan (porque null aplica a todos los días)
-        weekday_overlaps = (
-            existing.weekday is None or  # Existente aplica a todos los días
-            data.weekday is None or      # Nuevo aplica a todos los días
-            existing.weekday == data.weekday  # Mismo día
-        )
-        
-        if weekday_overlaps:
-            # Verificar solapamiento de tiempos: dos rangos se solapan si start1 < end2 AND end1 > start2
-            if start_time < existing.end_time and end_time > existing.start_time:
-                # Mapear números de día a nombres
-                weekday_names = {0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves", 4: "Viernes", 5: "Sábado", 6: "Domingo"}
-                existing_weekday_str = "Todos los días" if existing.weekday is None else weekday_names.get(existing.weekday, f"Día {existing.weekday}")
-                new_weekday_str = "Todos los días" if data.weekday is None else weekday_names.get(data.weekday, f"Día {data.weekday}")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"El horario se solapa con uno existente: {existing.start_time.strftime('%H:%M')}-{existing.end_time.strftime('%H:%M')} ({existing_weekday_str}). "
-                           f"El nuevo horario {start_time.strftime('%H:%M')}-{end_time.strftime('%H:%M')} ({new_weekday_str}) no puede solaparse con horarios existentes."
-                )
-    
-    schedule = Schedule(
-        exhibitor_id=UUID(point_id),
-        type=data.type,
-        weekday=data.weekday,
-        start_time=start_time,
-        end_time=end_time,
-        is_active=data.is_active
-    )
-    db.add(schedule)
-    await db.commit()
-    await db.refresh(schedule)
+    # Crear schedule usando raw SQL INSERT para evitar problemas de greenlet con SQLite async
+    import uuid
+    schedule_id = str(uuid.uuid4())
+    weekday_value = data.weekday if data.weekday is not None else "NULL"
 
-    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_created", {"schedule_id": str(schedule.id), "point_id": str(point_id)})
+    insert_query = f"""
+    INSERT INTO schedules (id, exhibitor_id, type, weekday, start_time, end_time, is_active, created_at)
+    VALUES ('{schedule_id}', '{point_id}', '{data.type}', {weekday_value}, '{start_time}', '{end_time}', {1 if data.is_active else 0}, CURRENT_TIMESTAMP)
+    """
+
+    await db.execute(text(insert_query))
+    await db.commit()
+
+    await log_audit(db, admin.user_id or admin.hermano_id, "admin", "schedule_created", {"schedule_id": schedule_id, "point_id": str(point_id)})
 
     return {
-        "id": str(schedule.id),
-        "type": schedule.type,
-        "weekday": schedule.weekday,
-        "start_time": str(schedule.start_time),
-        "end_time": str(schedule.end_time),
-        "is_active": schedule.is_active
+        "id": schedule_id,
+        "type": data.type,
+        "weekday": data.weekday,
+        "start_time": str(start_time),
+        "end_time": str(end_time),
+        "is_active": data.is_active
     }
 
 @router.patch("/schedules/{schedule_id}")
