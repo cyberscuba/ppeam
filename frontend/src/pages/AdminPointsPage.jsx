@@ -1633,7 +1633,9 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
 
                               client.post('/api/upload/photo', formDataUpload)
                                 .then(response => {
-                                  setFormData({ ...formData, photo_url: response.data.url })
+                                  const imageUrl = response.data.url
+                                  console.log('📸 Imagen cargada:', imageUrl, 'Respuesta completa:', response.data)
+                                  setFormData({ ...formData, photo_url: imageUrl })
                                   setNotification({
                                     type: 'success',
                                     title: 'Imagen cargada',
