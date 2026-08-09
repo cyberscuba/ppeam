@@ -1800,46 +1800,73 @@ class ExhibitorLeaderUpdate(BaseModel):
 
 @router.get("/exhibitor-leaders")
 async def get_exhibitor_leaders(
-    exhibitor_id: UUID = Query(None),
+    exhibitor_id: str = Query(None),
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all exhibitor leaders. Si se proporciona exhibitor_id, solo retorna líderes de ese exhibidor."""
-    query = select(ExhibitorLeader, Admin, Exhibitor)
-    if exhibitor_id:
-        query = query.where(ExhibitorLeader.exhibitor_id == exhibitor_id)
-    
-    query = query.join(Admin, ExhibitorLeader.admin_id == Admin.id)
-    query = query.join(Exhibitor, ExhibitorLeader.exhibitor_id == Exhibitor.id)
-    
-    result = await db.execute(query.order_by(ExhibitorLeader.position, Exhibitor.name))
-    leaders_data = result.all()
-    
-    response = []
-    for leader, admin_obj, exhibitor in leaders_data:
-        # Obtener nombre del admin
-        admin_name = None
-        if admin_obj.user_id:
-            user_result = await db.execute(select(User).where(User.id == admin_obj.user_id))
-            user = user_result.scalar_one_or_none()
-            admin_name = user.full_name if user else None
-        elif admin_obj.hermano_id:
-            hermano_result = await db.execute(select(Hermano).where(Hermano.id == admin_obj.hermano_id))
-            hermano = hermano_result.scalar_one_or_none()
-            admin_name = hermano.nombre if hermano else None
-        
-        response.append({
-            "id": str(leader.id),
-            "admin_id": str(leader.admin_id),
-            "admin_name": admin_name,
-            "admin_username": admin_obj.username,
-            "exhibitor_id": str(leader.exhibitor_id),
-            "exhibitor_name": exhibitor.name,
-            "position": leader.position,
-            "created_at": leader.created_at.isoformat()
-        })
-    
-    return response
+    from sqlalchemy import text as sql_text
+
+    try:
+        if exhibitor_id:
+            # Get leaders for specific exhibitor using raw SQL
+            query_sql = """
+                SELECT
+                    el.id, el.admin_id, el.exhibitor_id, el.position, el.created_at,
+                    a.username, a.hermano_id, a.user_id,
+                    e.name,
+                    h.nombre
+                FROM exhibitor_leaders el
+                JOIN admins a ON el.admin_id = a.id
+                JOIN exhibitors e ON el.exhibitor_id = e.id
+                LEFT JOIN hermanos h ON a.hermano_id = h.id
+                WHERE el.exhibitor_id = :exhibitor_id
+                ORDER BY el.position, e.name
+            """
+            result = await db.execute(sql_text(query_sql), {"exhibitor_id": exhibitor_id})
+        else:
+            # Get all leaders
+            query_sql = """
+                SELECT
+                    el.id, el.admin_id, el.exhibitor_id, el.position, el.created_at,
+                    a.username, a.hermano_id, a.user_id,
+                    e.name,
+                    h.nombre
+                FROM exhibitor_leaders el
+                JOIN admins a ON el.admin_id = a.id
+                JOIN exhibitors e ON el.exhibitor_id = e.id
+                LEFT JOIN hermanos h ON a.hermano_id = h.id
+                ORDER BY el.position, e.name
+            """
+            result = await db.execute(sql_text(query_sql))
+
+        rows = result.fetchall()
+        response = []
+
+        for row in rows:
+            leader_id, admin_id, exhibitor_id_val, position, created_at = row[:5]
+            username, hermano_id, user_id = row[5:8]
+            exhibitor_name, hermano_nombre = row[8:10]
+
+            # Get admin name from hermano
+            admin_name = hermano_nombre if hermano_nombre else username
+
+            response.append({
+                "id": str(leader_id),
+                "admin_id": str(admin_id),
+                "admin_name": admin_name,
+                "admin_username": username,
+                "exhibitor_id": str(exhibitor_id_val),
+                "exhibitor_name": exhibitor_name,
+                "position": position,
+                "created_at": created_at.isoformat() if created_at else None
+            })
+
+        return response
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] get_exhibitor_leaders: {str(e)}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error fetching exhibitor leaders: {str(e)}")
 
 @router.post("/exhibitor-leaders")
 async def create_exhibitor_leader(
