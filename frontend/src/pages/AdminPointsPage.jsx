@@ -1337,13 +1337,80 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                                       ? 'bg-white border-gray-200'
                                       : 'bg-gray-100 border-gray-200 opacity-70'
                                   }`}>
-                                    <div className="flex-1">
+                                    <div className="flex-1 space-y-2">
                                       <p className={`text-sm font-medium ${schedule.is_active ? 'text-gray-900' : 'text-gray-600'}`}>
                                         {getWeekdayLabel(schedule.weekday)}
                                       </p>
-                                      <p className={`text-sm font-mono ${schedule.is_active ? 'text-gray-700' : 'text-gray-500'}`}>
-                                        {startTime} → {endTime} <span className={schedule.is_active ? 'text-gray-600' : 'text-gray-500'}>({durationHours}h)</span>
-                                      </p>
+                                      {/* Inputs editables de hora */}
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        {/* Hora inicio */}
+                                        <div className="flex items-center gap-1 bg-white border border-gray-300 rounded px-2 py-1">
+                                          <select
+                                            value={startTime.split(':')[0] || ''}
+                                            onChange={(e) => {
+                                              const mins = startTime.split(':')[1] || '00'
+                                              handleUpdateSchedule(schedule.id, { start_time: `${e.target.value}:${mins}` })
+                                            }}
+                                            className="bg-transparent border-0 text-sm font-bold text-gray-900 focus:ring-0 p-0 w-12"
+                                          >
+                                            <option value="">HH</option>
+                                            {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                                              <option key={h} value={String(h).padStart(2, '0')}>
+                                                {String(h).padStart(2, '0')}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <span className="text-gray-400 font-bold">:</span>
+                                          <select
+                                            value={startTime.split(':')[1] || '00'}
+                                            onChange={(e) => {
+                                              const hrs = startTime.split(':')[0] || '06'
+                                              handleUpdateSchedule(schedule.id, { start_time: `${hrs}:${e.target.value}` })
+                                            }}
+                                            className="bg-transparent border-0 text-sm font-bold text-gray-900 focus:ring-0 p-0 w-10"
+                                          >
+                                            <option value="00">00</option>
+                                            <option value="30">30</option>
+                                          </select>
+                                        </div>
+
+                                        <span className="text-gray-400 font-bold">→</span>
+
+                                        {/* Hora fin */}
+                                        <div className="flex items-center gap-1 bg-white border border-gray-300 rounded px-2 py-1">
+                                          <select
+                                            value={endTime.split(':')[0] || ''}
+                                            onChange={(e) => {
+                                              const mins = endTime.split(':')[1] || '00'
+                                              handleUpdateSchedule(schedule.id, { end_time: `${e.target.value}:${mins}` })
+                                            }}
+                                            className="bg-transparent border-0 text-sm font-bold text-gray-900 focus:ring-0 p-0 w-12"
+                                          >
+                                            <option value="">HH</option>
+                                            {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                                              <option key={h} value={String(h).padStart(2, '0')}>
+                                                {String(h).padStart(2, '0')}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <span className="text-gray-400 font-bold">:</span>
+                                          <select
+                                            value={endTime.split(':')[1] || '00'}
+                                            onChange={(e) => {
+                                              const hrs = endTime.split(':')[0] || '08'
+                                              handleUpdateSchedule(schedule.id, { end_time: `${hrs}:${e.target.value}` })
+                                            }}
+                                            className="bg-transparent border-0 text-sm font-bold text-gray-900 focus:ring-0 p-0 w-10"
+                                          >
+                                            <option value="00">00</option>
+                                            <option value="30">30</option>
+                                          </select>
+                                        </div>
+
+                                        <span className={`text-xs font-medium ${schedule.is_active ? 'text-gray-600' : 'text-gray-500'}`}>
+                                          ({durationHours}h)
+                                        </span>
+                                      </div>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                       <select
