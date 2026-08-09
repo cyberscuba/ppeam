@@ -687,36 +687,41 @@ async def get_exhibitor(
     db: AsyncSession = Depends(get_db)
 ):
     """Get exhibitor (punto de exhibidor) by ID with schedules"""
-    result = await db.execute(select(Exhibitor).where(Exhibitor.id == point_id))
-    exhibitor = result.scalar_one_or_none()
-    
-    if not exhibitor:
+    from sqlalchemy import text
+
+    # Use raw SQL to fetch exhibitor (SQLite async issues with ORM)
+    result = await db.execute(text(f"SELECT id, code, name, description, latitude, longitude, photo_url, \"order\", is_active FROM exhibitors WHERE id = '{point_id}'"))
+    exhibitor_row = result.fetchone()
+
+    if not exhibitor_row:
         raise HTTPException(status_code=404, detail="Exhibitor not found")
-    
+
+    exhibitor_id = exhibitor_row[0]
+
     # Get schedules
-    schedules_result = await db.execute(select(Schedule).where(Schedule.exhibitor_id == exhibitor.id))
-    schedules = schedules_result.scalars().all()
-    
+    schedules_result = await db.execute(text(f"SELECT id, weekday, start_time, end_time, is_active FROM schedules WHERE exhibitor_id = '{exhibitor_id}'"))
+    schedules_rows = schedules_result.fetchall()
+
     return {
-        "id": str(exhibitor.id),
-        "code": exhibitor.code,
-        "name": exhibitor.name,
-        "description": exhibitor.description,
-        "latitude": float(exhibitor.latitude) if exhibitor.latitude else None,
-        "longitude": float(exhibitor.longitude) if exhibitor.longitude else None,
-        "photo_url": exhibitor.photo_url,
-        "order": exhibitor.order,
+        "id": str(exhibitor_row[0]),
+        "code": exhibitor_row[1],
+        "name": exhibitor_row[2],
+        "description": exhibitor_row[3],
+        "latitude": float(exhibitor_row[4]) if exhibitor_row[4] else None,
+        "longitude": float(exhibitor_row[5]) if exhibitor_row[5] else None,
+        "photo_url": exhibitor_row[6],
+        "order": exhibitor_row[7],
         "max_exhibidores": 1,
-        "is_active": exhibitor.is_active,
+        "is_active": exhibitor_row[8],
         "schedules": [
             {
-                "id": str(s.id),
-                "weekday": s.weekday,
-                "start_time": str(s.start_time),
-                "end_time": str(s.end_time),
-                "is_active": s.is_active
+                "id": str(s[0]),
+                "weekday": s[1],
+                "start_time": str(s[2]),
+                "end_time": str(s[3]),
+                "is_active": s[4]
             }
-            for s in schedules
+            for s in schedules_rows
         ]
     }
 
