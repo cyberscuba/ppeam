@@ -124,7 +124,7 @@ export default function AdminPointsPage() {
     try {
       let savedPoint
       if (editingPoint) {
-        console.log('📤 Enviando PATCH con datos:', pointData)
+        console.log('📤 Enviando PATCH con datos:', JSON.stringify(pointData, null, 2))
         const { data } = await client.patch(`/api/admin/points/${editingPoint.id}`, pointData)
         savedPoint = { ...editingPoint, ...data }
         setEditingPoint(savedPoint)
@@ -138,6 +138,12 @@ export default function AdminPointsPage() {
       }
       return savedPoint
     } catch (error) {
+      console.error('❌ Error en PATCH:', {
+        status: error.response?.status,
+        detail: error.response?.data?.detail,
+        data: error.response?.data,
+        message: error.message
+      })
       setNotification({
         type: 'error',
         title: 'Error',
