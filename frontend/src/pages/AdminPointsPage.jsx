@@ -1361,9 +1361,9 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                   <div className="space-y-4 mb-6">
                     {(() => {
                       // Agrupar franjas por tipo de día
-                      const weekday = schedules.filter(s => s.weekday !== null && s.weekday !== undefined && s.weekday >= 0 && s.weekday <= 4) // Lun-Vie
-                      const weekend = schedules.filter(s => s.weekday === 5 || s.weekday === 6) // Sáb-Dom
-                      const allDays = schedules.filter(s => s.weekday === null || s.weekday === undefined) // Todos
+                      const weekday = schedules.filter(s => s.type === 'specific_day') // Día específico
+                      const weekend = schedules.filter(s => s.type === 'weekends') // Sábado y Domingo
+                      const allDays = schedules.filter(s => s.type === 'all_days') // Todos los días
 
                       const renderScheduleBlocks = (title, scheds, icon, bgColor) => {
                         if (scheds.length === 0) return null
