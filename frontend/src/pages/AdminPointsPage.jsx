@@ -655,7 +655,7 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       const [pointData, leadersData, hermanosData] = await Promise.all([
         client.get(`/api/admin/points/${currentPoint.id}`),
         client.get(`/api/admin/exhibitor-leaders?exhibitor_id=${currentPoint.id}`),
-        client.get(`/api/admin/hermanos/available?exhibitor_id=${currentPoint.id}`)
+        client.get(`/api/admin/hermanos/available?exhibitor_id=${currentPoint.id}&gender=hermano`)
       ])
       const scheds = pointData.data.schedules || []
       console.log('📅 Franjas cargadas:', scheds.length, scheds)
@@ -1960,11 +1960,13 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
                         className="input flex-1 py-3 text-base font-medium"
                       >
                         <option value="">Seleccionar hermano...</option>
-                        {hermanos && Array.isArray(hermanos) && hermanos.filter(hermano => !hermano.is_assigned_here).map(hermano => (
-                          <option key={hermano.id} value={hermano.id}>
-                            {hermano.nombre}
-                          </option>
-                        ))}
+                        {hermanos && Array.isArray(hermanos) && hermanos
+                          .filter(hermano => hermano.genero === 'hermano' && !hermano.is_assigned_here)
+                          .map(hermano => (
+                            <option key={hermano.id} value={hermano.id}>
+                              {hermano.nombre}
+                            </option>
+                          ))}
                       </select>
                       <select
                         value={newLeader.position}

@@ -1356,17 +1356,23 @@ async def get_all_hermanos(
 @router.get("/hermanos/available")
 async def get_available_hermanos(
     exhibitor_id: UUID = Query(None),
+    gender: str = Query(None, description="Filter by gender: 'hermano' or 'hermana'"),
     admin: Admin = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all active hermanos (both male and female) available for assignment to an exhibitor"""
+    """Get available hermanos for assignment to an exhibitor. Can filter by gender."""
     try:
         from sqlalchemy import text
 
         # Get all active hermanos ordered by name
-        result = await db.execute(
-            text("SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = 1 ORDER BY nombre")
-        )
+        # Optionally filter by gender (only hermano/hermana, not mixed)
+        if gender and gender.lower() in ['hermano', 'hermana']:
+            sql = "SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = 1 AND genero = :gender ORDER BY nombre"
+            result = await db.execute(text(sql), {"gender": gender.lower()})
+        else:
+            sql = "SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = 1 ORDER BY nombre"
+            result = await db.execute(text(sql))
+
         all_hermanos_rows = result.fetchall()
 
         # Get existing hermano_ids already assigned to THIS exhibitor
