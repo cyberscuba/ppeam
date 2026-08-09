@@ -58,7 +58,7 @@ export default function HomePage() {
     setSearching(true)
     try {
       // Buscar hermano por teléfono
-      const { data } = await client.get(`/api/api/users/search?phone=${encodeURIComponent(phone)}`)
+      const { data } = await client.get(`/api/users/search?phone=${encodeURIComponent(phone)}`)
       if (data.found) {
         setUserFound(true)
         // Usar full_name o nombre según el tipo

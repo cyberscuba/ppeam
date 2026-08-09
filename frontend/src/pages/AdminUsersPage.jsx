@@ -21,7 +21,7 @@ export default function AdminUsersPage() {
   const loadUsers = async () => {
     setLoading(true)
     try {
-      const { data } = await client.get('/api/api/admin/hermanos')
+      const { data } = await client.get('/api/admin/hermanos')
       logger.log('Hermanos cargados:', data.length)
       setUsers(data)
     } catch (error) {
@@ -43,7 +43,7 @@ export default function AdminUsersPage() {
       if (editingUser) {
         await client.patch(`/api/admin/hermanos/${editingUser.id}`, userData)
       } else {
-        await client.post('/api/api/admin/hermanos', userData)
+        await client.post('/api/admin/hermanos', userData)
       }
       setShowModal(false)
       setEditingUser(null)

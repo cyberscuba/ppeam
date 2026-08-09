@@ -18,7 +18,7 @@ export default function OTPModal({ onClose, onSuccess }) {
     setLoading(true)
 
     try {
-      await client.post('/api/api/auth/otp/request', {
+      await client.post('/api/auth/otp/request', {
         phone,
         full_name: fullName
       })
@@ -36,7 +36,7 @@ export default function OTPModal({ onClose, onSuccess }) {
     setLoading(true)
 
     try {
-      const { data } = await client.post('/api/api/auth/otp/verify', {
+      const { data } = await client.post('/api/auth/otp/verify', {
         phone,
         code: otp
       })

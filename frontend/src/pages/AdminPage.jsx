@@ -61,7 +61,7 @@ export default function AdminPage() {
 
   const loadRequests = async () => {
     try {
-      const { data } = await client.get(`/api/api/admin/requests?status=${filter}`)
+      const { data } = await client.get(`/api/admin/requests?status=${filter}`)
       if (!Array.isArray(data)) {
         logger.error('Error: requests response is not an array', data)
         setRequests([])

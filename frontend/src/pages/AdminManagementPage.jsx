@@ -21,8 +21,8 @@ export default function AdminManagementPage() {
   const loadData = async () => {
     try {
       const [adminsRes, hermanosRes] = await Promise.all([
-        client.get('/api/api/admin/admins'),
-        client.get('/api/api/admin/hermanos')
+        client.get('/api/admin/admins'),
+        client.get('/api/admin/hermanos')
       ])
       setAdmins(adminsRes.data)
       setUsers(hermanosRes.data)
@@ -38,7 +38,7 @@ export default function AdminManagementPage() {
       if (editingAdmin) {
         await client.patch(`/api/admin/admins/${editingAdmin.id}`, adminData)
       } else {
-        await client.post('/api/api/admin/admins', adminData)
+        await client.post('/api/admin/admins', adminData)
       }
       setShowModal(false)
       setEditingAdmin(null)

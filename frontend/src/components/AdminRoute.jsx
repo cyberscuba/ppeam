@@ -25,7 +25,7 @@ export default function AdminRoute({ children }) {
       // Try to verify admin access by making a test request
       try {
         // Use a lightweight endpoint to verify admin access (just get pending requests)
-        await client.get('/api/api/admin/requests', {
+        await client.get('/api/admin/requests', {
           params: { status: 'pending' }
         })
         // If successful, update user to mark as admin
