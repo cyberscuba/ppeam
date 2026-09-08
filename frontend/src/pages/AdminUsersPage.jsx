@@ -148,106 +148,89 @@ export default function AdminUsersPage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:gap-5">
           {filteredUsers.map((user) => (
             <div
               key={user.id}
-              className="card border border-gray-200 bg-white/80 shadow-sm hover:shadow-md transition-shadow"
+              className="group border border-gray-100 bg-white rounded-lg shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-200"
             >
-              {/* Layout principal: info izquierda, acciones derecha */}
-              <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-8">
-                {/* Columna izquierda: identidad + contacto + información */}
-                <div className="flex-1 flex gap-4">
-                  {/* Avatar / Icono */}
-                  <div className="relative flex-shrink-0">
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-md">
-                      <Users className="text-white" size={22} />
+              {/* Contenedor principal */}
+              <div className="flex flex-col md:flex-row md:items-start gap-0">
+                {/* Sección principal: Avatar + Info */}
+                <div className="flex-1 flex gap-4 p-6">
+                  {/* Avatar circular con iniciales */}
+                  <div className="flex-shrink-0">
+                    <div className="h-14 w-14 rounded-full bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center ring-1 ring-indigo-300/50">
+                      <span className="text-sm font-semibold text-indigo-700">
+                        {user.nombre.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </span>
                     </div>
-                    {/* Estado activo/inactivo */}
-                    <span
-                      className={`mt-2 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                        user.is_active
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          user.is_active ? 'bg-green-500' : 'bg-red-500'
-                        }`}
-                      />
-                      {user.is_active ? 'Activo' : 'Inactivo'}
-                    </span>
                   </div>
 
                   {/* Contenido textual */}
-                  <div className="flex-1 space-y-3">
-                    {/* Encabezado: nombre + badges */}
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                      <div>
-                        <h3 className="text-xl font-bold text-gray-900">
-                          {user.nombre}
-                        </h3>
-                      </div>
+                  <div className="flex-1 min-w-0">
+                    {/* Línea superior: Nombre + Estado + Tipo */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900 truncate">
+                        {user.nombre}
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        {/* Badge de estado */}
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-md">
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              user.is_active ? 'bg-emerald-500' : 'bg-gray-400'
+                            }`}
+                          />
+                          <span className={`text-xs font-medium ${
+                            user.is_active ? 'text-emerald-700' : 'text-gray-600'
+                          }`}>
+                            {user.is_active ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </div>
 
-                      {/* Badges de rol */}
-                      <div className="flex flex-wrap gap-2">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${
-                            user.gender_label === 'Hermana'
-                              ? 'bg-pink-50 text-pink-700 border border-pink-200'
-                              : 'bg-blue-50 text-blue-700 border border-blue-200'
-                          }`}
-                        >
+                        {/* Tipo de relación */}
+                        <span className="inline-flex text-xs font-medium text-gray-600 px-2.5 py-1.5 bg-gray-50 rounded-md">
                           {user.gender_label || 'Hermano'}
                         </span>
-                        {user.is_admin && (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-purple-50 text-purple-700 border border-purple-200">
-                            Administrador
-                          </span>
-                        )}
                       </div>
                     </div>
 
-                    {/* Sección contacto */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 rounded-lg p-3">
+                    {/* Grid de información: 2 columnas en desktop */}
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-4">
                       {/* Teléfono */}
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-0.5 mb-1">
                           Contacto
                         </p>
-                        <div className="flex items-center text-sm text-gray-700 gap-2">
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-                            <Phone size={14} />
-                          </span>
-                          <span className="font-mono">{user.telefono}</span>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <Phone size={16} className="text-gray-400 flex-shrink-0" />
+                          <span className="font-mono truncate">{user.telefono}</span>
                         </div>
                       </div>
 
                       {/* Congregación */}
                       {user.congregacion && (
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-0.5 mb-1">
                             Congregación
                           </p>
-                          <div className="flex items-center text-sm text-gray-700 gap-2">
-                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-                              <MapPin size={14} />
-                            </span>
-                            <span>{user.congregacion}</span>
+                          <div className="flex items-center gap-2 text-sm text-gray-700">
+                            <MapPin size={16} className="text-gray-400 flex-shrink-0" />
+                            <span className="truncate">{user.congregacion}</span>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {/* Sección metadatos */}
+                    {/* Fecha de registro - sutil */}
                     {user.created_at && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <Calendar size={14} />
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                        <Calendar size={14} className="flex-shrink-0" />
                         <span>
-                          Registrado: {new Date(user.created_at).toLocaleDateString('es-ES', {
+                          Registrado el {new Date(user.created_at).toLocaleDateString('es-ES', {
                             year: 'numeric',
-                            month: 'long',
+                            month: 'short',
                             day: 'numeric'
                           })}
                         </span>
@@ -256,41 +239,41 @@ export default function AdminUsersPage() {
                   </div>
                 </div>
 
-                {/* Columna derecha: acciones */}
-                <div className="w-full lg:w-1/3 flex flex-col justify-between gap-3">
-                  {/* Botones de acción */}
-                  <div className="flex flex-col sm:flex-row lg:flex-col gap-2">
-                    {/* Editar - primario */}
-                    <button
-                      onClick={() => { setEditingUser(user); setShowModal(true) }}
-                      className="btn btn-primary flex-1 justify-center py-2.5 text-sm font-semibold"
-                    >
-                      <Edit size={18} className="mr-2" />
-                      Editar perfil
-                    </button>
+                {/* Sección de acciones - Derecha */}
+                <div className="w-full md:w-auto flex md:flex-col gap-2 px-6 pb-6 md:pb-6 md:pr-6 md:pl-0 border-t md:border-t-0 md:border-l border-gray-100 md:justify-end">
+                  {/* Editar - Primario */}
+                  <button
+                    onClick={() => { setEditingUser(user); setShowModal(true) }}
+                    className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  >
+                    <Edit size={16} />
+                    <span>Editar</span>
+                  </button>
 
-                    {/* Activar/Desactivar - warning outline */}
-                    <button
-                      onClick={() => handleToggleStatus(user.id, user.is_active)}
-                      className={`flex-1 inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
-                        user.is_active
-                          ? 'border-orange-500 text-orange-600 hover:bg-orange-50'
-                          : 'border-green-500 text-green-600 hover:bg-green-50'
-                      }`}
-                    >
-                      <Power size={18} />
-                      {user.is_active ? 'Desactivar' : 'Activar'}
-                    </button>
+                  {/* Desactivar/Activar - Secundario outline */}
+                  <button
+                    onClick={() => handleToggleStatus(user.id, user.is_active)}
+                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                      user.is_active
+                        ? 'border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500'
+                        : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 focus:ring-emerald-500'
+                    }`}
+                  >
+                    <Power size={16} />
+                    <span className="hidden sm:inline">{user.is_active ? 'Desactivar' : 'Activar'}</span>
+                    <span className="sm:hidden">{user.is_active ? 'Off' : 'On'}</span>
+                  </button>
 
-                    {/* Eliminar - danger ghost */}
-                    <button
-                      onClick={() => handleDelete(user.id)}
-                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
-                    >
-                      <Trash size={18} />
-                      Eliminar
-                    </button>
-                  </div>
+                  {/* Eliminar - Texto discreto */}
+                  <button
+                    onClick={() => handleDelete(user.id)}
+                    className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    aria-label="Eliminar hermano(a)"
+                  >
+                    <Trash size={16} />
+                    <span className="hidden sm:inline">Eliminar</span>
+                    <span className="sm:hidden">×</span>
+                  </button>
                 </div>
               </div>
             </div>
