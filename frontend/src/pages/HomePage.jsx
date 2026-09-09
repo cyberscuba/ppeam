@@ -54,25 +54,33 @@ export default function HomePage() {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false)
   const [dataPrivacyAccepted, setDataPrivacyAccepted] = useState(false)
 
-  // Check and show privacy modal on mount
+  // No need to show privacy modal on mount - it will show when user tries to search
   useEffect(() => {
-    const accepted = localStorage.getItem('dataPrivacyAccepted')
-    if (!accepted) {
-      setShowPrivacyModal(true)
-    } else {
-      setDataPrivacyAccepted(true)
+    // Opcional: verificar historial de aceptaciones
+    const privacyLog = localStorage.getItem('dataPrivacyLog')
+    if (privacyLog) {
+      const acceptances = JSON.parse(privacyLog)
+      logger.info('Privacy acceptance history:', acceptances)
     }
   }, [])
 
-  const handlePrivacyAccept = () => {
+  const handlePrivacyAccept = async () => {
     const timestamp = new Date().toISOString()
-    localStorage.setItem('dataPrivacyAccepted', timestamp)
-    localStorage.setItem('dataPrivacyVersion', '1.0')
-    setDataPrivacyAccepted(true)
-    setShowPrivacyModal(false)
+    // Guardar cada aceptación con timestamp para auditoría
+    const privacyLog = JSON.parse(localStorage.getItem('dataPrivacyLog') || '[]')
+    privacyLog.push({
+      timestamp: timestamp,
+      phone: phone,
+      version: '1.0',
+      action: 'accepted'
+    })
+    localStorage.setItem('dataPrivacyLog', JSON.stringify(privacyLog))
 
     // Log acceptance for audit
-    logger.info('Data privacy accepted at ' + timestamp)
+    logger.info('Data privacy accepted at ' + timestamp + ' for phone ' + phone)
+
+    // Continuar con la búsqueda del usuario
+    await continueAfterPrivacy()
   }
 
   const handlePrivacyReject = () => {
@@ -87,7 +95,17 @@ export default function HomePage() {
   const searchUser = async (e) => {
     e.preventDefault()
     if (!phone) return
-    
+
+    // Mostrar modal de privacidad cada vez antes de buscar
+    setShowPrivacyModal(true)
+    setSearching(false)
+    return
+  }
+
+  const continueAfterPrivacy = async () => {
+    if (!phone) return
+
+    setShowPrivacyModal(false)
     setSearching(true)
     try {
       // Buscar hermano por teléfono
