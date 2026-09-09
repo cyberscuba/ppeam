@@ -1144,7 +1144,7 @@ async def update_schedule(
             raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM:SS")
 
     if data.is_active is not None:
-        updates["is_active"] = 1 if data.is_active else 0
+        updates["is_active"] = data.is_active
         schedule["is_active"] = data.is_active
 
     # Aplicar cambios con raw SQL UPDATE
