@@ -660,10 +660,15 @@ function PointModal({ point: initialPoint, onClose, onSave, onDeleteSchedule }) 
       const scheds = pointData.data.schedules || []
       console.log('📅 Franjas cargadas:', scheds.length, scheds)
       setSchedules(scheds)
-      setLeaders(Array.isArray(leadersData.data) ? leadersData.data : [])
+
+      const leadersArray = Array.isArray(leadersData.data) ? leadersData.data : []
+      console.log('👔 Líderes cargados:', leadersArray.length, leadersArray)
+      setLeaders(leadersArray)
+
       // Cargar todos los hermanos disponibles
       const hermanosList = Array.isArray(hermanosData.data) ? hermanosData.data : []
-      console.log('👥 Hermanos disponibles:', hermanosList.length)
+      console.log('👥 Hermanos disponibles:', hermanosList.length, hermanosList)
+      console.log('🔍 Hermanos filtrados (solo hermano):', hermanosList.filter(h => h.genero === 'hermano').length)
       setHermanos(hermanosList)
     } catch (error) {
       console.error('Error loading point details:', error)

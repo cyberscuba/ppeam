@@ -81,13 +81,13 @@ async def add_process_time_header(request: Request, call_next):
 # Include routers
 from app.routers import users
 
-app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(users.router, prefix="/users", tags=["Users"])
-app.include_router(points.router, prefix="/points", tags=["Points"])
-app.include_router(requests.router, prefix="/requests", tags=["Requests"])
-app.include_router(admin.router, prefix="/admin", tags=["Admin"])
-app.include_router(reports.router, prefix="/admin/reports", tags=["Reports"])
-app.include_router(upload.router, prefix="/upload", tags=["Upload"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(users.router, prefix="/api/users", tags=["Users"])
+app.include_router(points.router, prefix="/api/points", tags=["Points"])
+app.include_router(requests.router, prefix="/api/requests", tags=["Requests"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(reports.router, prefix="/api/admin/reports", tags=["Reports"])
+app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
 app.include_router(health.router, tags=["Health"])
 
 # Prometheus metrics
