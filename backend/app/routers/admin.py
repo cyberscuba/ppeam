@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete, Date, cast
+from sqlalchemy import select, func, delete, Date, cast, or_
 from typing import List
 from pydantic import BaseModel
 from uuid import UUID
@@ -2498,4 +2498,124 @@ async def get_dashboard_stats(
         "total_slots": int(total_slots),
         "occupied_slots": int(occupied_slots),
         "available_slots": int(max(total_slots - occupied_slots, 0))
+    }
+
+
+# Nuevos endpoints de estadísticas para dashboard
+@router.get("/dashboard/stats-by-month")
+async def get_stats_by_month(
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Obtener estadísticas de turnos por mes (últimos 12 meses)"""
+    from datetime import timedelta
+
+    stats = []
+    today = date.today()
+
+    for i in range(11, -1, -1):
+        current_date = today - timedelta(days=30*i)
+        month_start = date(current_date.year, current_date.month, 1)
+        if current_date.month == 12:
+            month_end = date(current_date.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            month_end = date(current_date.year, current_date.month + 1, 1) - timedelta(days=1)
+
+        # Obtener turnos asignados este mes
+        result = await db.execute(
+            select(func.count(RequestItem.id))
+            .select_from(RequestItem)
+            .join(Request, RequestItem.request_id == Request.id)
+            .where(cast(Request.created_at, Date) >= month_start)
+            .where(cast(Request.created_at, Date) <= month_end)
+        )
+        assigned = result.scalar() or 0
+
+        # Obtener turnos tomados (aprobados) este mes
+        result = await db.execute(
+            select(func.count(RequestItem.id))
+            .select_from(RequestItem)
+            .join(Request, RequestItem.request_id == Request.id)
+            .where(cast(Request.created_at, Date) >= month_start)
+            .where(cast(Request.created_at, Date) <= month_end)
+            .where(RequestItem.status == "approved")
+        )
+        taken = result.scalar() or 0
+
+        # Obtener turnos libres (disponibles) este mes
+        result = await db.execute(
+            select(func.count(Slot.id))
+            .select_from(Slot)
+            .join(Schedule, Slot.schedule_id == Schedule.id)
+            .where(cast(Slot.date, Date) >= month_start)
+            .where(cast(Slot.date, Date) <= month_end)
+            .where(Slot.status == "available")
+        )
+        free = result.scalar() or 0
+
+        month_name = month_start.strftime("%b %Y")
+        stats.append({
+            "month": month_name,
+            "assigned": int(assigned),
+            "taken": int(taken),
+            "free": int(free),
+            "date": month_start.isoformat()
+        })
+
+    return stats
+
+
+@router.get("/dashboard/hermanos-by-turns")
+async def get_hermanos_by_turns(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Obtener lista de hermanos ordenados por cantidad de turnos tomados (paginado de 50)"""
+    from sqlalchemy import and_
+
+    # Obtener hermanos con cantidad de turnos aprobados
+    result = await db.execute(
+        select(
+            Hermano.id,
+            Hermano.nombre,
+            Hermano.telefono,
+            Hermano.congregacion,
+            func.count(RequestItem.id).label("turns_count")
+        )
+        .outerjoin(Request, Hermano.id == Request.user_id)
+        .outerjoin(RequestItem, Request.id == RequestItem.request_id)
+        .where(or_(RequestItem.status == "approved", RequestItem.id.is_(None)))
+        .group_by(Hermano.id, Hermano.nombre, Hermano.telefono, Hermano.congregacion)
+        .order_by(func.count(RequestItem.id).desc(), Hermano.nombre.asc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+
+    hermanos = result.all()
+
+    # Obtener total de hermanos
+    total_result = await db.execute(
+        select(func.count(Hermano.id))
+    )
+    total = total_result.scalar() or 0
+
+    return {
+        "data": [
+            {
+                "id": str(h[0]),
+                "nombre": h[1],
+                "telefono": h[2],
+                "congregacion": h[3],
+                "turns_count": int(h[4] or 0)
+            }
+            for h in hermanos
+        ],
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": (total + limit - 1) // limit
+        }
     }

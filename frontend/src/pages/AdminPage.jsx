@@ -13,24 +13,28 @@ import ConfirmationModal from '../components/ConfirmationModal'
 export default function AdminPage() {
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('approved') // Cambiar default a approved
-  const [availabilitySummary, setAvailabilitySummary] = useState({ 
-    available: 0, 
-    occupied: 0, 
-    total: 0,
-    available_hours: 0,
-    occupied_hours: 0,
-    total_hours: 0
+  const [filter, setFilter] = useState('approved')
+  const [availabilitySummary, setAvailabilitySummary] = useState({
+    available: 0,
+    occupied: 0,
+    total: 0
   })
-  
+
+  // Nuevas estadísticas
+  const [monthlyStats, setMonthlyStats] = useState([])
+  const [hermanoStats, setHermanoStats] = useState([])
+  const [hermanoPage, setHermanoPage] = useState(1)
+  const [hermanoPagination, setHermanoPagination] = useState({ page: 1, limit: 50, total: 0, total_pages: 1 })
+  const [requestCounts, setRequestCounts] = useState({ approved: 0, cancelled: 0 })
+
   // Filtros adicionales
   const [searchTerm, setSearchTerm] = useState('')
   const [exhibitorFilter, setExhibitorFilter] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [exhibitors, setExhibitors] = useState([])
-  
+
   const [notification, setNotification] = useState(null)
-  const [confirmationModal, setConfirmationModal] = useState(null) // { isOpen, title, message, onConfirm, onCancel }
+  const [confirmationModal, setConfirmationModal] = useState(null)
   const navigate = useNavigate()
   const { isAuthenticated } = useAuthStore()
 
@@ -42,7 +46,15 @@ export default function AdminPage() {
     loadRequests()
     loadAvailabilitySummary()
     loadExhibitors()
+    loadMonthlyStats()
+    loadHermanoStats(1)
   }, [filter, isAuthenticated, navigate])
+
+  useEffect(() => {
+    if (hermanoPage !== 1) {
+      loadHermanoStats(hermanoPage)
+    }
+  }, [hermanoPage])
 
   const loadExhibitors = async () => {
     try {
@@ -68,6 +80,13 @@ export default function AdminPage() {
         return
       }
       setRequests(data)
+
+      // Actualizar contador de estados
+      const approvedCount = data.length
+      setRequestCounts(prev => ({
+        ...prev,
+        [filter]: approvedCount
+      }))
     } catch (error) {
       logger.error('Error loading requests:', error)
       setRequests([])
@@ -83,6 +102,27 @@ export default function AdminPage() {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMonthlyStats = async () => {
+    try {
+      const { data } = await client.get('/api/admin/dashboard/stats-by-month')
+      setMonthlyStats(data || [])
+    } catch (error) {
+      logger.error('Error loading monthly stats:', error)
+      setMonthlyStats([])
+    }
+  }
+
+  const loadHermanoStats = async (page = 1) => {
+    try {
+      const { data } = await client.get(`/api/admin/dashboard/hermanos-by-turns?page=${page}&limit=50`)
+      setHermanoStats(data.data || [])
+      setHermanoPagination(data.pagination || { page: 1, limit: 50, total: 0, total_pages: 1 })
+    } catch (error) {
+      logger.error('Error loading hermano stats:', error)
+      setHermanoStats([])
     }
   }
 
@@ -296,7 +336,7 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Availability Summary - Mejorado */}
+      {/* Availability Summary - Corregido */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-6 shadow-md">
           <div className="flex items-center justify-between mb-3">
@@ -304,18 +344,18 @@ export default function AdminPage() {
             <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
           <p className="text-4xl font-bold text-green-700 mb-1">{availabilitySummary.available}</p>
-          <p className="text-sm text-green-600">{availabilitySummary.available_hours} horas disponibles</p>
+          <p className="text-sm text-green-600">turno{availabilitySummary.available !== 1 ? 's' : ''} disponible{availabilitySummary.available !== 1 ? 's' : ''}</p>
         </div>
-        
+
         <div className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl p-6 shadow-md">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-blue-800 text-lg">Ocupados</h3>
+            <h3 className="font-bold text-blue-800 text-lg">Asignados</h3>
             <Clock className="h-8 w-8 text-blue-600" />
           </div>
           <p className="text-4xl font-bold text-blue-700 mb-1">{availabilitySummary.occupied}</p>
-          <p className="text-sm text-blue-600">{availabilitySummary.occupied_hours} horas ocupadas</p>
+          <p className="text-sm text-blue-600">turno{availabilitySummary.occupied !== 1 ? 's' : ''} asignado{availabilitySummary.occupied !== 1 ? 's' : ''}</p>
         </div>
-        
+
         <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-6 shadow-md">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold text-purple-800 text-lg">Total Sistema</h3>
@@ -323,14 +363,14 @@ export default function AdminPage() {
           </div>
           <p className="text-4xl font-bold text-purple-700 mb-1">{availabilitySummary.total}</p>
           <p className="text-sm text-purple-600">
-            {availabilitySummary.total > 0 
-              ? Math.round((availabilitySummary.occupied / availabilitySummary.total) * 100) 
+            {availabilitySummary.total > 0
+              ? Math.round((availabilitySummary.occupied / availabilitySummary.total) * 100)
               : 0}% de ocupación
           </p>
         </div>
       </div>
 
-      {/* Status Filters - Sin "Pendientes" */}
+      {/* Status Filters - Con contadores */}
       <div className="card mb-6">
         <div className="flex items-center gap-2 mb-4">
           <Filter className="h-5 w-5 text-primary-600" />
@@ -346,7 +386,7 @@ export default function AdminPage() {
             }`}
           >
             <CheckCircle size={18} />
-            Aprobados
+            Asignados ({requestCounts.approved || requests.length})
           </button>
           <button
             onClick={() => setFilter('cancelled')}
@@ -357,7 +397,7 @@ export default function AdminPage() {
             }`}
           >
             <Unlock size={18} />
-            Liberados
+            Liberados ({requestCounts.cancelled || 0})
           </button>
         </div>
       </div>
@@ -434,10 +474,110 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* Turnos por Mes */}
+      {monthlyStats.length > 0 && (
+        <div className="card mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="h-5 w-5 text-primary-600" />
+            <h3 className="font-bold text-lg">Turnos por Mes (Últimos 12 meses)</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-100 border-b">
+                  <th className="px-4 py-2 text-left font-bold">Mes</th>
+                  <th className="px-4 py-2 text-center font-bold text-blue-600">Asignados</th>
+                  <th className="px-4 py-2 text-center font-bold text-green-600">Tomados</th>
+                  <th className="px-4 py-2 text-center font-bold text-orange-600">Libres</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyStats.map((stat, idx) => (
+                  <tr key={idx} className="border-b hover:bg-blue-50">
+                    <td className="px-4 py-3 font-medium">{stat.month}</td>
+                    <td className="px-4 py-3 text-center text-blue-700 font-bold">{stat.assigned}</td>
+                    <td className="px-4 py-3 text-center text-green-700 font-bold">{stat.taken}</td>
+                    <td className="px-4 py-3 text-center text-orange-700 font-bold">{stat.free}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Hermanos por Cantidad de Turnos */}
+      {hermanoStats.length > 0 && (
+        <div className="card mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="h-5 w-5 text-primary-600" />
+            <h3 className="font-bold text-lg">Hermanos - Ranking de Turnos</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-100 border-b">
+                  <th className="px-4 py-2 text-left font-bold">Posición</th>
+                  <th className="px-4 py-2 text-left font-bold">Nombre</th>
+                  <th className="px-4 py-2 text-left font-bold">Teléfono</th>
+                  <th className="px-4 py-2 text-left font-bold">Congregación</th>
+                  <th className="px-4 py-2 text-center font-bold text-green-600">Turnos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hermanoStats.map((hermano, idx) => (
+                  <tr key={hermano.id} className="border-b hover:bg-blue-50">
+                    <td className="px-4 py-3 font-bold text-gray-700">
+                      {((hermanoPagination.page - 1) * 50) + idx + 1}
+                    </td>
+                    <td className="px-4 py-3 font-medium">{hermano.nombre}</td>
+                    <td className="px-4 py-3 text-gray-600 font-mono text-xs">{hermano.telefono}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{hermano.congregacion || '-'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full font-bold text-sm">
+                        {hermano.turns_count}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Paginación */}
+          {hermanoPagination.total_pages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                Mostrando {((hermanoPagination.page - 1) * 50) + 1} - {Math.min(hermanoPagination.page * 50, hermanoPagination.total)} de {hermanoPagination.total} hermanos
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setHermanoPage(Math.max(1, hermanoPage - 1))}
+                  disabled={hermanoPage === 1}
+                  className="btn btn-secondary text-sm disabled:opacity-50"
+                >
+                  ← Anterior
+                </button>
+                <span className="px-4 py-2 bg-gray-100 rounded-lg font-medium">
+                  {hermanoPagination.page} / {hermanoPagination.total_pages}
+                </span>
+                <button
+                  onClick={() => setHermanoPage(Math.min(hermanoPagination.total_pages, hermanoPage + 1))}
+                  disabled={hermanoPage === hermanoPagination.total_pages}
+                  className="btn btn-secondary text-sm disabled:opacity-50"
+                >
+                  Siguiente →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Results Count */}
       <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
         <p className="text-blue-800 font-medium">
-          📊 Mostrando <strong>{filteredRows.length}</strong> turno{filteredRows.length !== 1 ? 's' : ''} 
+          📊 Mostrando <strong>{filteredRows.length}</strong> turno{filteredRows.length !== 1 ? 's' : ''}
           {searchTerm || exhibitorFilter || dateFilter ? ' (filtrados)' : ''}
         </p>
       </div>
@@ -451,22 +591,42 @@ export default function AdminPage() {
       ) : filteredRows.length === 0 ? (
         <div className="card text-center py-12">
           <AlertCircle className="mx-auto mb-4 text-gray-400" size={48} />
-          <p className="text-gray-600 text-lg font-medium mb-2">
-            {requests.length === 0 
-              ? `No hay turnos ${filter === 'approved' ? 'aprobados' : 'liberados'}`
-              : 'No se encontraron resultados con los filtros aplicados'}
-          </p>
-          {(searchTerm || exhibitorFilter || dateFilter) && (
-            <button
-              onClick={() => {
-                setSearchTerm('')
-                setExhibitorFilter('')
-                setDateFilter('')
-              }}
-              className="btn btn-secondary mt-4"
-            >
-              Limpiar Filtros
-            </button>
+          {requests.length === 0 ? (
+            <div>
+              <p className="text-green-700 text-lg font-bold mb-2">
+                ✅ Todos los turnos están asignados
+              </p>
+              <p className="text-gray-600 text-sm mb-4">
+                Ocupación: {availabilitySummary.total > 0 ? Math.round((availabilitySummary.occupied / availabilitySummary.total) * 100) : 0}% ({availabilitySummary.occupied} de {availabilitySummary.total})
+              </p>
+              <p className="text-gray-500 text-sm mb-4">
+                💡 Ver tab "{filter === 'approved' ? 'Liberados' : 'Asignados'}" si necesita redistribuir turnos
+              </p>
+              {filter === 'approved' && (
+                <button
+                  onClick={() => setFilter('cancelled')}
+                  className="btn btn-secondary"
+                >
+                  Ver Turnos Liberados
+                </button>
+              )}
+            </div>
+          ) : (
+            <div>
+              <p className="text-gray-600 text-lg font-medium mb-2">
+                No se encontraron resultados con los filtros aplicados
+              </p>
+              <button
+                onClick={() => {
+                  setSearchTerm('')
+                  setExhibitorFilter('')
+                  setDateFilter('')
+                }}
+                className="btn btn-secondary mt-4"
+              >
+                Limpiar Filtros
+              </button>
+            </div>
           )}
         </div>
       ) : (
