@@ -16,8 +16,12 @@ echo "📊 Verificando esquema de BD..."
 python init_database.py || echo "⚠️ Error al inicializar, continuando..."
 
 # Load initial data
-echo "📥 Cargando datos iniciales..."
-python load_data.py || echo "⚠️ Error al cargar datos, continuando..."
+echo "📥 Cargando exhibidores..."
+python load_data.py || echo "⚠️ Error al cargar exhibidores, continuando..."
+
+# Load hermanos from CSV
+echo "👥 Cargando hermanos..."
+python load_hermanos.py || echo "⚠️ Error al cargar hermanos, continuando..."
 
 # Start uvicorn
 echo "🚀 Iniciando servidor..."
