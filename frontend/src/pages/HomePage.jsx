@@ -4,6 +4,7 @@ import client from '../api/client'
 import DatePicker from '../components/DatePicker'
 import CalendarioMensual from '../components/CalendarioMensual'
 import NotificationModal from '../components/NotificationModal'
+import DataPrivacyModal from '../components/DataPrivacyModal'
 import logger from '../utils/logger'
 
 // Días de la semana
@@ -50,6 +51,38 @@ export default function HomePage() {
   const [closedExhibitorInfo, setClosedExhibitorInfo] = useState(null)
   const [showCartModal, setShowCartModal] = useState(false)
   const [notification, setNotification] = useState(null) // { type, title, message, details }
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false)
+  const [dataPrivacyAccepted, setDataPrivacyAccepted] = useState(false)
+
+  // Check and show privacy modal on mount
+  useEffect(() => {
+    const accepted = localStorage.getItem('dataPrivacyAccepted')
+    if (!accepted) {
+      setShowPrivacyModal(true)
+    } else {
+      setDataPrivacyAccepted(true)
+    }
+  }, [])
+
+  const handlePrivacyAccept = () => {
+    const timestamp = new Date().toISOString()
+    localStorage.setItem('dataPrivacyAccepted', timestamp)
+    localStorage.setItem('dataPrivacyVersion', '1.0')
+    setDataPrivacyAccepted(true)
+    setShowPrivacyModal(false)
+
+    // Log acceptance for audit
+    logger.info('Data privacy accepted at ' + timestamp)
+  }
+
+  const handlePrivacyReject = () => {
+    setNotification({
+      type: 'warning',
+      title: 'Acceso Denegado',
+      message: 'Debe aceptar el tratamiento de datos para continuar.',
+      details: ['Por favor, recargue la página e acepte las condiciones.']
+    })
+  }
 
   const searchUser = async (e) => {
     e.preventDefault()
@@ -329,9 +362,17 @@ export default function HomePage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl">
-      {/* Intro */}
-      <div className="mb-8">
+    <>
+      {/* Modal de Privacidad */}
+      <DataPrivacyModal
+        isOpen={showPrivacyModal}
+        onAccept={handlePrivacyAccept}
+        onReject={handlePrivacyReject}
+      />
+
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+        {/* Intro */}
+        <div className="mb-8">
         <p className="text-lg" style={{ color: '#0D1214', opacity: 0.8 }}>
           Seleccione los puntos de exhibidor y horarios deseados para su turno
         </p>
@@ -780,16 +821,17 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Modal de Notificación */}
-      {notification && (
-        <NotificationModal
-          type={notification.type}
-          title={notification.title}
-          message={notification.message}
-          details={notification.details}
-          onClose={() => setNotification(null)}
-        />
-      )}
-    </div>
+        {/* Modal de Notificación */}
+        {notification && (
+          <NotificationModal
+            type={notification.type}
+            title={notification.title}
+            message={notification.message}
+            details={notification.details}
+            onClose={() => setNotification(null)}
+          />
+        )}
+      </div>
+    </>
   )
 }
