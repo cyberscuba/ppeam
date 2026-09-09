@@ -15,6 +15,10 @@ echo "✅ BD lista"
 echo "📊 Verificando esquema de BD..."
 python init_database.py || echo "⚠️ Error al inicializar, continuando..."
 
+# Load initial data
+echo "📥 Cargando datos iniciales..."
+python load_data.py || echo "⚠️ Error al cargar datos, continuando..."
+
 # Start uvicorn
 echo "🚀 Iniciando servidor..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000
