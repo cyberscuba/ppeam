@@ -1072,7 +1072,7 @@ async def update_schedule(
             SELECT id, type, weekday, start_time, end_time, is_active FROM schedules
             WHERE exhibitor_id = :exhibitor_id
             AND id != :schedule_id
-            AND is_active = 1
+            AND is_active = true
         """
         if new_weekday is not None:
             sql += " AND (weekday = :new_weekday OR weekday IS NULL)"
@@ -1372,10 +1372,10 @@ async def get_available_hermanos(
         # Get all active hermanos ordered by name
         # Optionally filter by gender (only hermano/hermana, not mixed)
         if gender and gender.lower() in ['hermano', 'hermana']:
-            sql = "SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = 1 AND genero = :gender ORDER BY nombre"
+            sql = "SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = true AND genero = :gender ORDER BY nombre"
             result = await db.execute(text(sql), {"gender": gender.lower()})
         else:
-            sql = "SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = 1 ORDER BY nombre"
+            sql = "SELECT id, nombre, congregacion, telefono, genero FROM hermanos WHERE is_active = true ORDER BY nombre"
             result = await db.execute(text(sql))
 
         all_hermanos_rows = result.fetchall()

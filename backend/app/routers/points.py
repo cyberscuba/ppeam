@@ -130,7 +130,7 @@ async def get_exhibitors(
         from sqlalchemy import text
         sql_query = "SELECT id, type, weekday, start_time, end_time, is_active FROM schedules WHERE exhibitor_id = :exhibitor_id"
         if active_only:
-            sql_query += " AND is_active = 1"
+            sql_query += " AND is_active = true"
         sql_query += " ORDER BY start_time"
 
         schedules_result = await db.execute(text(sql_query), {"exhibitor_id": str(exhibitor.id)})
