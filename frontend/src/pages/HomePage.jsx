@@ -94,11 +94,18 @@ export default function HomePage() {
 
   const searchUser = async (e) => {
     e.preventDefault()
-    if (!phone) return
+    if (!phone) {
+      console.warn('❌ No phone entered')
+      return
+    }
 
-    // Mostrar modal de privacidad cada vez antes de buscar
+    console.log('🔍 Searching for phone:', phone)
+    console.log('📋 Showing privacy modal')
+
+    // SIEMPRE mostrar modal de privacidad antes de buscar
     setShowPrivacyModal(true)
     setSearching(false)
+
     return
   }
 
