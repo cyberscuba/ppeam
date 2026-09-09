@@ -387,87 +387,68 @@ export default function CalendarioMensual({ exhibitor, onSelectSlot, selectedSlo
                   <p className="text-sm mt-2">Todos los turnos están completos</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {selectedDay.availableSlots.map((slot, index) => {
                     const { schedule, availability } = slot
                     const current = availability.current || availability.approved_count || 0
                     const capacity = availability.capacity || 5
-                    const percentOccupied = capacity > 0 ? (current / capacity) * 100 : 0
-                    const percentAvailable = 100 - percentOccupied
-                    
-                    // Colores según ocupación
-                    let bgColor = 'bg-green-50 border-green-300'
-                    let textColor = 'text-green-800'
-                    let progressColor = 'bg-green-500'
-                    
-                    if (percentOccupied >= 80) {
-                      bgColor = 'bg-red-50 border-red-300'
-                      textColor = 'text-red-800'
-                      progressColor = 'bg-red-500'
-                    } else if (percentOccupied >= 60) {
-                      bgColor = 'bg-orange-50 border-orange-300'
-                      textColor = 'text-orange-800'
-                      progressColor = 'bg-orange-500'
-                    } else if (percentOccupied >= 40) {
-                      bgColor = 'bg-yellow-50 border-yellow-300'
-                      textColor = 'text-yellow-800'
-                      progressColor = 'bg-yellow-500'
+                    const availableCount = capacity - current
+
+                    // Color según disponibilidad (simplificado para UX)
+                    let badgeColor = 'bg-green-600'
+                    let bgColor = 'bg-green-50 border-green-300 hover:bg-green-100'
+
+                    if (availableCount === 0) {
+                      badgeColor = 'bg-red-600'
+                      bgColor = 'bg-red-50 border-red-300 opacity-50 cursor-not-allowed'
+                    } else if (availableCount === 1) {
+                      badgeColor = 'bg-orange-600'
+                      bgColor = 'bg-orange-50 border-orange-300 hover:bg-orange-100'
+                    } else if (availableCount <= 2) {
+                      badgeColor = 'bg-yellow-600'
+                      bgColor = 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100'
                     }
 
                     const isAlreadySelected = selectedSlots.some(
                       s => s.schedule_id === schedule.id && s.date === selectedDay.dateStr
                     )
-                    
-                    const isConfirmed = availability.is_confirmed || false
+
+                    const isFull = availableCount === 0
 
                     return (
-                      <button
-                        key={index}
-                        onClick={() => handleSlotSelect(schedule, selectedDay)}
-                        disabled={isAlreadySelected}
-                        className={`
-                          w-full p-4 rounded-lg border-2 transition-all
-                          ${bgColor}
-                          ${isAlreadySelected ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-md cursor-pointer'}
-                        `}
-                      >
-                        <div className="flex items-center justify-between mb-2">
+                      <div key={index} className={`p-4 rounded-lg border-2 transition-all ${bgColor}`}>
+                        <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-3">
-                            <Clock className={`h-6 w-6 ${textColor}`} />
-                            <div className="text-left">
-                              <div className={`text-xl sm:text-2xl font-bold ${textColor}`}>
+                            <Clock className="h-6 w-6 text-gray-700" />
+                            <div>
+                              <div className="text-2xl font-bold text-gray-900">
                                 {schedule.start_time.substring(0, 5)} - {schedule.end_time.substring(0, 5)}
                               </div>
-                              {isAlreadySelected && (
-                                <div className="text-sm text-gray-600 mt-1">✓ Ya seleccionado</div>
-                              )}
-                              {isConfirmed && !isAlreadySelected && (
-                                <div className="text-xs text-green-600 mt-1 font-semibold">✓ Turno confirmado</div>
-                              )}
                             </div>
                           </div>
-                          
-                          <div className="text-right">
-                            <div className={`text-2xl sm:text-3xl font-bold ${textColor}`}>
-                              {current}/{capacity}
-                            </div>
-                            <div className="text-xs sm:text-sm text-gray-600">
-                              personas
-                            </div>
+
+                          <div className={`${badgeColor} text-white px-4 py-2 rounded-full font-bold text-lg`}>
+                            {availableCount} {availableCount === 1 ? 'lugar' : 'lugares'}
                           </div>
                         </div>
-                        
-                        {/* Barra de progreso */}
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                          <div 
-                            className={`h-2 rounded-full ${progressColor} transition-all`}
-                            style={{ width: `${percentOccupied}%` }}
-                          />
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1 text-right">
-                          {Math.round(percentOccupied)}% ocupado
-                        </div>
-                      </button>
+
+                        {/* Botón de selección - GRANDE Y EVIDENTE */}
+                        <button
+                          onClick={() => handleSlotSelect(schedule, selectedDay)}
+                          disabled={isFull || isAlreadySelected}
+                          className={`
+                            w-full py-4 px-6 font-bold text-lg rounded-lg transition-all
+                            ${isAlreadySelected
+                              ? 'bg-gray-400 text-white cursor-not-allowed'
+                              : isFull
+                              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                              : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg active:scale-95'
+                            }
+                          `}
+                        >
+                          {isAlreadySelected ? '✓ Ya seleccionado' : isFull ? '⊗ Completo' : '✓ SELECCIONO ESTE HORARIO'}
+                        </button>
+                      </div>
                     )
                   })}
                 </div>
