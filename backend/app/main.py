@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -93,6 +94,11 @@ app.include_router(health.router, tags=["Health"])
 # Prometheus metrics
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
+
+# Servir uploads estáticos (en producción nginx los sirve directo desde disco;
+# este mount es fallback para desarrollo/acceso directo al backend)
+upload.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(upload.UPLOAD_DIR)), name="uploads")
 
 @app.get("/")
 async def root():

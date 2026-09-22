@@ -55,6 +55,7 @@ services:
       - "8080:8000"   # cerrar cuando haya nginx
     volumes:
       - /data/containers/backend/logs:/app/logs
+      - /opt/exhibidores/backend/uploads:/opt/exhibidores/backend/uploads   # debe coincidir con nginx (alias /opt/exhibidores/backend/uploads/)
     networks:
       - ppeam_net
 
