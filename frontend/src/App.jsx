@@ -7,6 +7,9 @@ import AdminPointsPage from './pages/AdminPointsPage'
 import AdminReportsPage from './pages/AdminReportsPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminManagementPage from './pages/AdminManagementPage'
+import PointAdminLoginPage from './pages/PointAdminLoginPage'
+import PointAdminDashboard from './pages/PointAdminDashboard'
+import PointAdminAnalytics from './pages/PointAdminAnalytics'
 import Header from './components/Header'
 import AdminRoute from './components/AdminRoute'
 import { useAuthStore } from './store/authStore'
@@ -14,9 +17,9 @@ import { useAuthStore } from './store/authStore'
 function App() {
   const { isAuthenticated } = useAuthStore()
   const location = useLocation()
-  
+
   // No mostrar header en páginas de login
-  const hideHeader = location.pathname === '/api/admin/login' || location.pathname === '/login'
+  const hideHeader = location.pathname === '/api/admin/login' || location.pathname === '/login' || location.pathname === '/point-admin/login'
 
   return (
     <div className="min-h-screen">
@@ -30,6 +33,9 @@ function App() {
         <Route path="/api/admin/admins" element={<AdminRoute><AdminManagementPage /></AdminRoute>} />
         <Route path="/api/admin/points" element={<AdminRoute><AdminPointsPage /></AdminRoute>} />
         <Route path="/api/admin/reports" element={<AdminRoute><AdminReportsPage /></AdminRoute>} />
+        <Route path="/point-admin/login" element={<PointAdminLoginPage />} />
+        <Route path="/point-admin/dashboard" element={<PointAdminDashboard />} />
+        <Route path="/point-admin/analytics" element={<PointAdminAnalytics />} />
       </Routes>
     </div>
   )

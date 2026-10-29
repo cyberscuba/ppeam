@@ -19,7 +19,8 @@
     "zustand": "^4.4.7",
     "react-hook-form": "^7.48.2",
     "date-fns": "^2.30.0",
-    "lucide-react": "^0.294.0"
+    "lucide-react": "^0.294.0",
+    "recharts": "^2.10.3"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

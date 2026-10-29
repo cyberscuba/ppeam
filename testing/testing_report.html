@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Testing - PPEAM Point Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .subsection {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .subsection-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .test-item {
+            margin: 12px 0;
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 4px solid #ddd;
+        }
+
+        .test-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .test-item.passed {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+
+        .test-item.failed {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+
+        .test-item.pending {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+        }
+
+        .checkbox {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .test-label {
+            flex: 1;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .test-item.passed .test-label {
+            color: #155724;
+            text-decoration: line-through;
+        }
+
+        .test-item.failed .test-label {
+            color: #721c24;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-badge.passed {
+            background: #28a745;
+            color: white;
+        }
+
+        .status-badge.failed {
+            background: #dc3545;
+            color: white;
+        }
+
+        .status-badge.pending {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .summary-card h3 {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .summary-card .number {
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .summary-card .percentage {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .notes {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            color: #1565c0;
+        }
+
+        .timestamp {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            margin-top: 30px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 24px;
+            background: #e0e0e0;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 Reporte de Testing Completo</h1>
+            <p>PPEAM - Sistema de Gestión de Exhibidores - Point Admin</p>
+        </div>
+
+        <div class="content">
+            <!-- Summary -->
+            <div class="summary">
+                <div class="summary-card">
+                    <h3>Autenticación</h3>
+                    <div class="number"><span id="auth-passed">0</span>/<span id="auth-total">4</span></div>
+                    <div class="percentage"><span id="auth-percent">0</span>%</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Backend</h3>
+                    <div class="number"><span id="backend-passed">0</span>/<span id="backend-total">10</span></div>
+                    <div class="percentage"><span id="backend-percent">0</span>%</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Frontend</h3>
+                    <div class="number"><span id="frontend-passed">0</span>/<span id="frontend-total">30</span></div>
+                    <div class="percentage"><span id="frontend-percent">0</span>%</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Seguridad</h3>
+                    <div class="number"><span id="security-passed">0</span>/<span id="security-total">4</span></div>
+                    <div class="percentage"><span id="security-percent">0</span>%</div>
+                </div>
+            </div>
+
+            <div class="progress-bar">
+                <div class="progress-fill" id="overall-progress" style="width: 0%">
+                    <span id="overall-percent">0%</span>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-primary" onclick="markAllPassed()">✅ Marcar Todo Completado</button>
+                <button class="btn-secondary" onclick="resetAll()">↺ Resetear</button>
+                <button class="btn-secondary" onclick="exportReport()">📥 Descargar Reporte</button>
+            </div>
+
+            <!-- Section 1: Autenticación -->
+            <div class="section">
+                <h2 class="section-title">1. 🔐 Autenticación</h2>
+
+                <div class="subsection">
+                    <div class="subsection-title">Super Admin Login</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">POST /api/admin/login</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Credenciales: admin / Admin@2026</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">JWT token contiene role: super_admin</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Point Admin Login</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">POST /api/point-admin/login</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Credenciales: cuba_principal_1 / Admin@cuba_principal</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Validación de Credenciales Inválidas</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Usuario incorrecto → 401</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Contraseña incorrecta → 401</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Backend Endpoints -->
+            <div class="section">
+                <h2 class="section-title">2. 🔧 Endpoints Backend</h2>
+
+                <div class="subsection">
+                    <div class="subsection-title">Dashboard</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">GET /api/point-admin/dashboard → 200</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Contiene: exhibitor, total_slots, available_slots</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Solicitudes</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">GET /api/point-admin/requests → 200</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Paginación funciona (page, limit)</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Analytics</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">GET /api/point-admin/analytics/occupancy-daily → 200</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">GET /api/point-admin/analytics/requests-weekly → 200</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">GET /api/point-admin/audit-trail → 200</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">GET /api/point-admin/notifications/summary → 200</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Export</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">GET /api/point-admin/export?format=csv → 200</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">GET /api/point-admin/export?format=json → 200</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Frontend Pages -->
+            <div class="section">
+                <h2 class="section-title">3. 🎨 Páginas Frontend</h2>
+
+                <div class="subsection">
+                    <div class="subsection-title">Login Page</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Página /point-admin/login carga correctamente</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Campos: Usuario y Contraseña visibles</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Botón Ingresar funciona</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Dashboard - Tab Resumen</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Página /point-admin/dashboard carga</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Nombre del punto visible</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Cards con estadísticas (Slots, Disponibles, Tomados, %)</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Dashboard - Tab Turnos Solicitados</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Lista de hermanos cargada</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Información: nombre, teléfono, congregación visible</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Botón para liberar turno funciona</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Dashboard - Tab Hermanos</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Lista ordenada por cantidad de solicitudes (DESC)</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Paginación funciona (20 por página)</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Analytics Page</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Página /point-admin/analytics carga</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Gráfico de ocupación diaria visible</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Gráfico de solicitudes semanales visible</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Audit trail con paginación funciona</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Seguridad -->
+            <div class="section">
+                <h2 class="section-title">4. 🔒 Seguridad</h2>
+
+                <div class="subsection">
+                    <div class="subsection-title">Autenticación</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Token requerido en todos los endpoints</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Sin token → 401 Unauthorized</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">Autorización</div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">Point Admin solo ve su punto (exhibitor_id)</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                    <div class="test-item pending" onclick="toggleTest(this)">
+                        <input type="checkbox" class="checkbox" onclick="event.stopPropagation()">
+                        <span class="test-label">No puede ver datos de otros puntos</span>
+                        <span class="status-badge pending">Pendiente</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="notes">
+                <strong>📌 Notas Importantes:</strong>
+                <ul style="margin: 10px 0 0 20px;">
+                    <li>Credenciales de testing: cuba_principal_1 / Admin@cuba_principal</li>
+                    <li>Super Admin: admin / Admin@2026</li>
+                    <li>Base de datos contiene ~410 hermanos y 7 exhibidores</li>
+                    <li>Sistema en producción: 206.81.0.238</li>
+                </ul>
+            </div>
+
+            <div class="timestamp">
+                Reporte generado: <span id="timestamp"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleTest(element) {
+            element.classList.toggle('passed');
+            element.classList.remove('pending');
+
+            const checkbox = element.querySelector('.checkbox');
+            checkbox.checked = !checkbox.checked;
+
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const items = document.querySelectorAll('.test-item');
+            const passed = document.querySelectorAll('.test-item.passed').length;
+            const total = items.length;
+
+            const authTotal = document.querySelectorAll('.section:nth-child(1) .test-item').length;
+            const authPassed = document.querySelectorAll('.section:nth-child(1) .test-item.passed').length;
+
+            const backendTotal = document.querySelectorAll('.section:nth-child(2) .test-item').length;
+            const backendPassed = document.querySelectorAll('.section:nth-child(2) .test-item.passed').length;
+
+            const frontendTotal = document.querySelectorAll('.section:nth-child(3) .test-item').length;
+            const frontendPassed = document.querySelectorAll('.section:nth-child(3) .test-item.passed').length;
+
+            const securityTotal = document.querySelectorAll('.section:nth-child(4) .test-item').length;
+            const securityPassed = document.querySelectorAll('.section:nth-child(4) .test-item.passed').length;
+
+            // Update summary cards
+            updateCard('auth', authPassed, authTotal);
+            updateCard('backend', backendPassed, backendTotal);
+            updateCard('frontend', frontendPassed, frontendTotal);
+            updateCard('security', securityPassed, securityTotal);
+
+            // Overall progress
+            const percentage = total > 0 ? Math.round((passed / total) * 100) : 0;
+            document.getElementById('overall-progress').style.width = percentage + '%';
+            document.getElementById('overall-percent').textContent = percentage + '%';
+        }
+
+        function updateCard(prefix, passed, total) {
+            document.getElementById(prefix + '-passed').textContent = passed;
+            document.getElementById(prefix + '-total').textContent = total;
+            const percent = total > 0 ? Math.round((passed / total) * 100) : 0;
+            document.getElementById(prefix + '-percent').textContent = percent;
+        }
+
+        function markAllPassed() {
+            document.querySelectorAll('.test-item').forEach(item => {
+                if (!item.classList.contains('passed')) {
+                    item.classList.add('passed');
+                    item.classList.remove('pending');
+                    item.querySelector('.checkbox').checked = true;
+                }
+            });
+            updateSummary();
+        }
+
+        function resetAll() {
+            document.querySelectorAll('.test-item').forEach(item => {
+                item.classList.remove('passed');
+                item.classList.add('pending');
+                item.querySelector('.checkbox').checked = false;
+            });
+            updateSummary();
+        }
+
+        function exportReport() {
+            const report = {
+                timestamp: new Date().toISOString(),
+                summary: {
+                    auth: document.getElementById('auth-passed').textContent + '/' + document.getElementById('auth-total').textContent,
+                    backend: document.getElementById('backend-passed').textContent + '/' + document.getElementById('backend-total').textContent,
+                    frontend: document.getElementById('frontend-passed').textContent + '/' + document.getElementById('frontend-total').textContent,
+                    security: document.getElementById('security-passed').textContent + '/' + document.getElementById('security-total').textContent,
+                    overall: document.getElementById('overall-percent').textContent
+                },
+                details: []
+            };
+
+            document.querySelectorAll('.test-item').forEach(item => {
+                const label = item.querySelector('.test-label').textContent;
+                const status = item.classList.contains('passed') ? 'PASSED' : 'PENDING';
+                report.details.push({ test: label, status });
+            });
+
+            const json = JSON.stringify(report, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'testing-report-' + new Date().getTime() + '.json';
+            a.click();
+        }
+
+        // Initialize
+        document.getElementById('timestamp').textContent = new Date().toLocaleString('es-CO');
+        updateSummary();
+    </script>
+</body>
+</html>

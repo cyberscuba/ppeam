@@ -19,11 +19,11 @@ def load_data():
         port = os.getenv("DATABASE_PORT", "5432")
         db = os.getenv("POSTGRES_DB", "exhibidores_db")
     else:
-        # Parse URL: postgresql+asyncpg://exhibidores:exhibidores123@ppeam_postgres:5432/exhibidores_db
+        # Parse URL: postgresql://exhibidores:exhibidores123@ppeam_postgres:5432/exhibidores_db
         import re
-        match = re.match(r'postgresql\+asyncpg://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', db_url)
+        match = re.match(r'postgresql(\+\w+)?://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', db_url)
         if match:
-            user, password, host, port, db = match.groups()
+            _, user, password, host, port, db = match.groups()
         else:
             print(f"❌ Invalid DATABASE_URL format: {db_url}")
             return

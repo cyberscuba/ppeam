@@ -7,17 +7,15 @@ from app.database import Base
 
 class Hermano(Base):
     __tablename__ = "hermanos"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(Text, nullable=False)
     congregacion = Column(String(100))
-    telefono = Column(String(50), unique=True, nullable=False, index=True)  # Increased from 20 to 50 for multiple phones
+    telefono = Column(String(50), unique=True, nullable=False, index=True)
     genero = Column(String(10), default='hermano')  # 'hermano' or 'hermana'
     is_active = Column(Boolean, default=True, index=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
-    
-    admin = relationship("Admin", back_populates="hermano", uselist=False)
 
 class User(Base):
     __tablename__ = "users"
@@ -37,17 +35,15 @@ class User(Base):
 
 class Admin(Base):
     __tablename__ = "admins"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
-    hermano_id = Column(UUID(as_uuid=True), ForeignKey("hermanos.id", ondelete="CASCADE"), nullable=True)
     username = Column(String(50), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(50), nullable=False)  # 'super_admin' or 'lider_exhibidor'
+    role = Column(String(50), nullable=False)  # 'super_admin' or 'point_admin'
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    
+
     user = relationship("User", back_populates="admin")
-    hermano = relationship("Hermano", back_populates="admin")
     exhibitor_leaders = relationship("ExhibitorLeader", back_populates="admin", cascade="all, delete-orphan")
 
 class Exhibitor(Base):
